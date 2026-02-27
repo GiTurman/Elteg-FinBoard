@@ -24,6 +24,12 @@ import {
   getAllRequests, // PROMPT 6.3-008
   getInflationRate, // PROMPT 6.3-015
   getAnnualBudget, // PROMPT 7.4 - 001
+  // Board Session Persistence
+  getBoardSession,
+  openBoardSession,
+  closeBoardSession,
+  saveBoardStep,
+  getSavedBoardStep,
 } from '../services/mockService';
 import { DirectorApprovals } from './DirectorApprovals';
 import { DebtManagementView } from './DebtManagementView';
@@ -66,6 +72,8 @@ import {
   CornerUpLeft,
   Eye,
   EyeOff,
+  Power,
+  PlayCircle,
 } from 'lucide-react';
 import { exportGenericToExcel, exportMultiSheetExcel } from '../utils/excelExport';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -108,8 +116,14 @@ const formatTimestamp = (date: Date): string => {
 };
 
 export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
-  const [currentStep, setCurrentStep] = useState(0);
+  // === BOARD SESSION PERSISTENCE ===
+  // Restore step from localStorage on mount (survives refresh)
+  const [currentStep, setCurrentStepRaw] = useState(() => getSavedBoardStep());
   const [loading, setLoading] = useState(true);
+  
+  // Board session state
+  const [activeBoardSession, setActiveBoardSession] = useState<import('../types').BoardSession | null>(null);
+  const [boardLoading, setBoardLoading] = useState(true);
   
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [revenueCategories, setRevenueCategories] = useState<RevenueCategory[]>([]);
@@ -117,6 +131,28 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   const [realTimeBalances, setRealTimeBalances] = useState<FundBalance[]>([]); 
   const [expenseFunds, setExpenseFunds] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Wrapper: persist step to localStorage on every change
+  const setCurrentStep = (step: number) => {
+    setCurrentStepRaw(step);
+    saveBoardStep(step);
+  };
+
+  // Load active board session on mount
+  useEffect(() => {
+    const loadSession = async () => {
+      setBoardLoading(true);
+      const session = await getBoardSession();
+      setActiveBoardSession(session);
+      // If no active session, force step to 0 (archive view)
+      if (!session) {
+        setCurrentStepRaw(0);
+        localStorage.removeItem('finboard_council_step');
+      }
+      setBoardLoading(false);
+    };
+    loadSession();
+  }, []);
 
   const [sessions, setSessions] = useState<FinancialSession[]>([]);
   const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null);
@@ -395,6 +431,26 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       setExpandedMonths(prev => ({ ...prev, [key]: !prev[key] }));
   };
   
+  // === BOARD SESSION LIFECYCLE ===
+  const handleOpenBoard = async () => {
+    const session = await openBoardSession(user);
+    setActiveBoardSession(session);
+    setSelectedSessionDate(null);
+    setCurrentStep(1);
+  };
+
+  const handleCloseBoard = async () => {
+    await closeBoardSession();
+    setActiveBoardSession(null);
+    setCurrentStep(0);
+    setSelectedSessionDate(null);
+    // Reset report state
+    setIsReportGenerated(false);
+    setReportData(null);
+    setCompletionTimestamp(null);
+    setAiConclusion("");
+  };
+
   const handleStartNewSession = () => {
       setSelectedSessionDate(null); 
       setCurrentStep(1); 
@@ -634,6 +690,10 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   
   return (
     <div className="space-y-8 font-sans">
+      {boardLoading ? (
+        <div className="text-center p-12 text-gray-400">საბჭოს სტატუსი იტვირთება...</div>
+      ) : (
+      <>
       <div className="flex flex-col gap-2 border-b border-black pb-6">
         <div className="flex items-center justify-between">
            <div className="flex items-center gap-3">
@@ -646,6 +706,17 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                     <span className="text-xs font-bold bg-yellow-400 px-2 py-0.5 rounded text-black uppercase">
                         {currentStep === 0 ? "არქივი" : `ეტაპი ${currentStep}`}
                     </span>
+                    {activeBoardSession ? (
+                        <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded flex items-center gap-1 border border-green-200">
+                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                            საბჭო გახსნილია — {new Date(activeBoardSession.startTime).toLocaleDateString('ka-GE')} {new Date(activeBoardSession.startTime).toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                    ) : (
+                        <span className="text-xs font-bold bg-red-50 text-red-500 px-2 py-0.5 rounded flex items-center gap-1 border border-red-200">
+                            <span className="w-2 h-2 bg-red-400 rounded-full"></span>
+                            საბჭო დახურულია
+                        </span>
+                    )}
                     {selectedSessionDate && (
                         <span className="text-xs font-bold bg-gray-200 px-2 py-0.5 rounded text-gray-700 flex items-center gap-1">
                             <Lock size={10} /> Read-Only: {new Date(selectedSessionDate).toLocaleDateString('ka-GE')}
@@ -655,11 +726,18 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
             </div>
            </div>
            
-           {currentStep !== 0 && (
-                <button onClick={() => { setCurrentStep(0); setSelectedSessionDate(null); }} className="text-xs font-bold text-gray-500 hover:text-black uppercase border-b border-gray-300 pb-0.5">
-                    არქივში დაბრუნება
-                </button>
-           )}
+           <div className="flex items-center gap-3">
+               {activeBoardSession && isFinDirector && currentStep !== 0 && (
+                    <button onClick={() => { setCurrentStep(0); setSelectedSessionDate(null); }} className="text-xs font-bold text-gray-500 hover:text-black uppercase border-b border-gray-300 pb-0.5">
+                        არქივში დაბრუნება
+                    </button>
+               )}
+               {!activeBoardSession && currentStep !== 0 && (
+                    <button onClick={() => { setCurrentStep(0); setSelectedSessionDate(null); }} className="text-xs font-bold text-gray-500 hover:text-black uppercase border-b border-gray-300 pb-0.5">
+                        არქივში დაბრუნება
+                    </button>
+               )}
+           </div>
         </div>
       </div>
 
@@ -741,12 +819,28 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
 
                              <div className="w-px h-8 bg-gray-200 mx-2 hidden lg:block"></div>
 
-                             <button 
-                                onClick={handleStartNewSession}
-                                className="px-6 py-2 bg-green-600 text-white font-bold uppercase rounded hover:bg-green-700 transition-colors flex items-center gap-2 shadow-lg text-xs"
-                             >
-                                 <Plus size={14} /> ახალი კვირა (Step 1)
-                             </button>
+                             {/* Board Session Control */}
+                             {activeBoardSession ? (
+                                 <button 
+                                    onClick={() => setCurrentStep(1)}
+                                    className="px-6 py-2 bg-green-600 text-white font-bold uppercase rounded hover:bg-green-700 transition-colors flex items-center gap-2 shadow-lg text-xs"
+                                 >
+                                     <PlayCircle size={14} /> საბჭოში გადასვლა
+                                 </button>
+                             ) : (
+                                 isFinDirector ? (
+                                     <button 
+                                        onClick={handleOpenBoard}
+                                        className="px-6 py-2 bg-black text-white font-bold uppercase rounded hover:bg-gray-800 transition-colors flex items-center gap-2 shadow-lg text-xs"
+                                     >
+                                         <Gavel size={14} /> საბჭოს გახსნა
+                                     </button>
+                                 ) : (
+                                     <div className="px-4 py-2 bg-gray-100 text-gray-400 font-bold uppercase rounded text-xs flex items-center gap-2 border border-gray-200">
+                                         <Lock size={14} /> საბჭო დახურულია
+                                     </div>
+                                 )
+                             )}
                          </div>
                      </div>
 
@@ -1375,8 +1469,18 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                        </div>
                      )}
 
-                     <div className="flex justify-start pt-8 mt-8 border-t border-gray-200">
+                     <div className="flex justify-between items-center pt-8 mt-8 border-t border-gray-200">
                         <button onClick={() => setCurrentStep(12)} className="text-gray-500 hover:text-black font-bold uppercase text-xs flex items-center gap-2"><ChevronRight size={16} className="rotate-180"/> უკან</button>
+                        
+                        {/* საბჭოს დახურვა — only FD, only after report is finalized */}
+                        {isFinDirector && completionTimestamp && activeBoardSession && (
+                            <button 
+                                onClick={handleCloseBoard}
+                                className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white font-bold uppercase text-xs rounded hover:bg-red-700 transition-colors shadow-lg"
+                            >
+                                <Power size={16} /> საბჭოს დახურვა
+                            </button>
+                        )}
                      </div>
                  </div>
               )}
@@ -1384,6 +1488,8 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
           </>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 };

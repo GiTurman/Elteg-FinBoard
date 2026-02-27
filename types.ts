@@ -181,6 +181,7 @@ export interface ExpenseFund {
   name: string;
   description: string;
   category: 'Direct' | 'Marginal' | 'Adjustable' | 'Special';
+  maxBudgetShare?: number;
 }
 
 // --- PROMPT 409: Fund Balance Interface ---

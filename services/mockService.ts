@@ -1,9 +1,113 @@
-
 // FIX: Add GoogleGenAI import for AI summary generation
 import { GoogleGenAI } from '@google/genai';
 // FIX: Add MasterReportData to type imports
 import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, Priority, BankAccount, RevenueCategory, ExpenseFund, FundBalance, DebtRecord, CashInflowRecord, MasterReportData, ProjectRevenue, ServiceRevenue, PartRevenue, DirectiveSnapshot, Invoice, InvoiceStatus } from '../types';
 import { formatNumber } from '../utils/formatters';
+
+import { io } from 'socket.io-client';
+
+const socket = io(window.location.origin);
+
+socket.on('init_state', (state) => {
+  let hasData = false;
+  if (state.users) {
+    for (const key in USERS) delete USERS[key];
+    Object.assign(USERS, state.users);
+    hasData = true;
+  } else {
+    socket.emit('update_state', { key: 'users', value: USERS });
+  }
+  
+  if (state.requests) { REQUESTS = state.requests; localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'requests', value: REQUESTS }); }
+
+  if (state.invoices) { INVOICES = state.invoices; localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES)); hasData = true; }
+  else { socket.emit('update_state', { key: 'invoices', value: INVOICES }); }
+
+  if (state.cwInflow) { CURRENT_WEEK_CASH_INFLOW = state.cwInflow; localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW)); hasData = true; }
+  else { socket.emit('update_state', { key: 'cwInflow', value: CURRENT_WEEK_CASH_INFLOW }); }
+
+  if (state.archivedInflow) { ARCHIVED_CASH_INFLOW = state.archivedInflow; localStorage.setItem('finboard_archived_inflow', JSON.stringify(ARCHIVED_CASH_INFLOW)); hasData = true; }
+  else { socket.emit('update_state', { key: 'archivedInflow', value: ARCHIVED_CASH_INFLOW }); }
+
+  if (state.debtors) { DEBTORS = state.debtors; localStorage.setItem('finboard_debtors', JSON.stringify(DEBTORS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'debtors', value: DEBTORS }); }
+
+  if (state.creditors) { CREDITORS = state.creditors; localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'creditors', value: CREDITORS }); }
+
+  if (state.projects) { MOCK_PROJECTS = state.projects; localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'projects', value: MOCK_PROJECTS }); }
+
+  if (state.services) { MOCK_SERVICES = state.services; localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES)); hasData = true; }
+  else { socket.emit('update_state', { key: 'services', value: MOCK_SERVICES }); }
+
+  if (state.parts) { MOCK_PARTS = state.parts; localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'parts', value: MOCK_PARTS }); }
+
+  if (state.boardSessions) { BOARD_SESSIONS = state.boardSessions; localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'boardSessions', value: BOARD_SESSIONS }); }
+
+  if (state.hiddenFunds) { HIDDEN_FUNDS = state.hiddenFunds; localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'hiddenFunds', value: HIDDEN_FUNDS }); }
+
+  if (state.dispatchedDirectives) { DISPATCHED_DIRECTIVES = state.dispatchedDirectives; localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES)); hasData = true; }
+  else { socket.emit('update_state', { key: 'dispatchedDirectives', value: DISPATCHED_DIRECTIVES }); }
+
+  if (state.bankAccounts) { BANK_ACCOUNTS = state.bankAccounts; localStorage.setItem('finboard_bank_accounts', JSON.stringify(BANK_ACCOUNTS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS }); }
+
+  if (state.revenueCategories) { REVENUE_CATEGORIES = state.revenueCategories; localStorage.setItem('finboard_revenue_categories', JSON.stringify(REVENUE_CATEGORIES)); hasData = true; }
+  else { socket.emit('update_state', { key: 'revenueCategories', value: REVENUE_CATEGORIES }); }
+
+  if (state.annualBudgets) { ANNUAL_BUDGETS = state.annualBudgets; localStorage.setItem('finboard_annual_budgets', JSON.stringify(ANNUAL_BUDGETS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'annualBudgets', value: ANNUAL_BUDGETS }); }
+
+  if (state.currentYearActuals) { CURRENT_YEAR_ACTUALS = state.currentYearActuals; localStorage.setItem('finboard_current_year_actuals', JSON.stringify(CURRENT_YEAR_ACTUALS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'currentYearActuals', value: CURRENT_YEAR_ACTUALS }); }
+
+  if (state.budgetAnalysisComments) { BUDGET_ANALYSIS_COMMENTS = state.budgetAnalysisComments; localStorage.setItem('finboard_budget_comments', JSON.stringify(BUDGET_ANALYSIS_COMMENTS)); hasData = true; }
+  else { socket.emit('update_state', { key: 'budgetAnalysisComments', value: BUDGET_ANALYSIS_COMMENTS }); }
+
+  if (state.mockRates) { MOCK_RATES = state.mockRates; localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES)); hasData = true; }
+  else { socket.emit('update_state', { key: 'mockRates', value: MOCK_RATES }); }
+
+  if (state.mockInflation) { MOCK_INFLATION_RATE = state.mockInflation; localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE)); hasData = true; }
+  else { socket.emit('update_state', { key: 'mockInflation', value: MOCK_INFLATION_RATE }); }
+
+  if (hasData) {
+    window.dispatchEvent(new Event('finboard_sync'));
+  }
+});
+
+socket.on('state_updated', ({ key, value }) => {
+  if (key === 'users') {
+    for (const k in USERS) delete USERS[k];
+    Object.assign(USERS, value);
+    localStorage.setItem('finboard_users', JSON.stringify(USERS));
+  }
+  if (key === 'requests') { REQUESTS = value; localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS)); }
+  if (key === 'invoices') { INVOICES = value; localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES)); }
+  if (key === 'cwInflow') { CURRENT_WEEK_CASH_INFLOW = value; localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW)); }
+  if (key === 'archivedInflow') { ARCHIVED_CASH_INFLOW = value; localStorage.setItem('finboard_archived_inflow', JSON.stringify(ARCHIVED_CASH_INFLOW)); }
+  if (key === 'debtors') { DEBTORS = value; localStorage.setItem('finboard_debtors', JSON.stringify(DEBTORS)); }
+  if (key === 'creditors') { CREDITORS = value; localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS)); }
+  if (key === 'projects') { MOCK_PROJECTS = value; localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS)); }
+  if (key === 'services') { MOCK_SERVICES = value; localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES)); }
+  if (key === 'parts') { MOCK_PARTS = value; localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS)); }
+  if (key === 'boardSessions') { BOARD_SESSIONS = value; localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS)); }
+  if (key === 'hiddenFunds') { HIDDEN_FUNDS = value; localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS)); }
+  if (key === 'dispatchedDirectives') { DISPATCHED_DIRECTIVES = value; localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES)); }
+  if (key === 'bankAccounts') { BANK_ACCOUNTS = value; localStorage.setItem('finboard_bank_accounts', JSON.stringify(BANK_ACCOUNTS)); }
+  if (key === 'revenueCategories') { REVENUE_CATEGORIES = value; localStorage.setItem('finboard_revenue_categories', JSON.stringify(REVENUE_CATEGORIES)); }
+  if (key === 'annualBudgets') { ANNUAL_BUDGETS = value; localStorage.setItem('finboard_annual_budgets', JSON.stringify(ANNUAL_BUDGETS)); }
+  if (key === 'currentYearActuals') { CURRENT_YEAR_ACTUALS = value; localStorage.setItem('finboard_current_year_actuals', JSON.stringify(CURRENT_YEAR_ACTUALS)); }
+  if (key === 'budgetAnalysisComments') { BUDGET_ANALYSIS_COMMENTS = value; localStorage.setItem('finboard_budget_comments', JSON.stringify(BUDGET_ANALYSIS_COMMENTS)); }
+  if (key === 'mockRates') { MOCK_RATES = value; localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES)); }
+  if (key === 'mockInflation') { MOCK_INFLATION_RATE = value; localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE)); }
+
+  window.dispatchEvent(new Event('finboard_sync'));
+});
 
 // Mock Users Structure
 export const USERS: Record<string, User> = {
@@ -126,11 +230,31 @@ try {
     const storedReqs = localStorage.getItem('finboard_requests');
     if (storedReqs) REQUESTS = JSON.parse(storedReqs);
 } catch(e) {}
-const syncRequests = () => localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
+const syncRequests = () => {
+    localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
+    socket.emit('update_state', { key: 'requests', value: REQUESTS });
+};
 
 let BOARD_SESSIONS: BoardSession[] = [];
 let HIDDEN_FUNDS: Record<string, boolean> = {};
 let DISPATCHED_DIRECTIVES: DirectiveSnapshot[] = [];
+
+// === BOARD SESSION SYNC ===
+const syncBoardSessions = () => {
+    localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS));
+    socket.emit('update_state', { key: 'boardSessions', value: BOARD_SESSIONS });
+};
+
+try {
+    const sBoardSessions = localStorage.getItem('finboard_board_sessions');
+    if (sBoardSessions) BOARD_SESSIONS = JSON.parse(sBoardSessions);
+    
+    const sHiddenFunds = localStorage.getItem('finboard_hidden_funds');
+    if (sHiddenFunds) HIDDEN_FUNDS = JSON.parse(sHiddenFunds);
+    
+    const sDirectives = localStorage.getItem('finboard_directives');
+    if (sDirectives) DISPATCHED_DIRECTIVES = JSON.parse(sDirectives);
+} catch(e) {}
 
 // NEW: Invoice Storage (Persisted)
 let INVOICES: Invoice[] = [];
@@ -138,7 +262,10 @@ try {
     const storedInv = localStorage.getItem('finboard_invoices');
     if (storedInv) INVOICES = JSON.parse(storedInv);
 } catch(e) {}
-const syncInvoices = () => localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES));
+const syncInvoices = () => {
+    localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES));
+    socket.emit('update_state', { key: 'invoices', value: INVOICES });
+};
 
 
 export const getHiddenFunds = async (): Promise<Record<string, boolean>> => {
@@ -146,6 +273,7 @@ export const getHiddenFunds = async (): Promise<Record<string, boolean>> => {
 };
 export const toggleFundVisibility = async (fundId: string): Promise<void> => {
   HIDDEN_FUNDS[fundId] = !HIDDEN_FUNDS[fundId];
+  socket.emit('update_state', { key: 'hiddenFunds', value: HIDDEN_FUNDS });
 };
 export const toggleSectionVisibility = async (category: string): Promise<void> => {
   const fundsInCategory = EXPENSE_FUNDS.filter(f => f.category === category);
@@ -153,6 +281,7 @@ export const toggleSectionVisibility = async (category: string): Promise<void> =
   fundsInCategory.forEach(f => {
     HIDDEN_FUNDS[f.id] = !areAllHidden;
   });
+  socket.emit('update_state', { key: 'hiddenFunds', value: HIDDEN_FUNDS });
 };
 
 
@@ -212,6 +341,8 @@ try {
 const syncCashInflow = () => {
     localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW));
     localStorage.setItem('finboard_archived_inflow', JSON.stringify(ARCHIVED_CASH_INFLOW));
+    socket.emit('update_state', { key: 'cwInflow', value: CURRENT_WEEK_CASH_INFLOW });
+    socket.emit('update_state', { key: 'archivedInflow', value: ARCHIVED_CASH_INFLOW });
 };
 
 // --- DEBT/CREDIT DATA (Persisted) ---
@@ -228,6 +359,8 @@ try {
 const syncDebts = () => {
     localStorage.setItem('finboard_debtors', JSON.stringify(DEBTORS));
     localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS));
+    socket.emit('update_state', { key: 'debtors', value: DEBTORS });
+    socket.emit('update_state', { key: 'creditors', value: CREDITORS });
 }
 
 // --- BANKING DATA ---
@@ -245,15 +378,41 @@ let REVENUE_CATEGORIES: RevenueCategory[] = [
   { id: 'rev_other', name: 'სხვა', description: 'სხვა შემოსავლები', plannedAmount: 5000, actualAmount: 1200 },
 ];
 
+try {
+    const sBankAccounts = localStorage.getItem('finboard_bank_accounts');
+    if (sBankAccounts) BANK_ACCOUNTS = JSON.parse(sBankAccounts);
+    
+    const sRevenueCategories = localStorage.getItem('finboard_revenue_categories');
+    if (sRevenueCategories) REVENUE_CATEGORIES = JSON.parse(sRevenueCategories);
+} catch(e) {}
+
 // --- CURRENCY RATES (PROMPT 6.2-009) ---
 let MOCK_RATES = { USD: 2.70, EUR: 2.90 };
+try {
+    const sMockRates = localStorage.getItem('finboard_mock_rates');
+    if (sMockRates) MOCK_RATES = JSON.parse(sMockRates);
+} catch(e) {}
+
 export const getCurrencyRates = async () => ({ ...MOCK_RATES });
-export const updateCurrencyRates = async (newRates: { USD: number; EUR: number }) => { MOCK_RATES = { ...newRates }; };
+export const updateCurrencyRates = async (newRates: { USD: number; EUR: number }) => { 
+  MOCK_RATES = { ...newRates }; 
+  localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES));
+  socket.emit('update_state', { key: 'mockRates', value: MOCK_RATES });
+};
 
 // PROMPT 6.3-015: Inflation Rate
 let MOCK_INFLATION_RATE = 3.2;
+try {
+    const sMockInflation = localStorage.getItem('finboard_mock_inflation');
+    if (sMockInflation) MOCK_INFLATION_RATE = JSON.parse(sMockInflation);
+} catch(e) {}
+
 export const getInflationRate = async () => MOCK_INFLATION_RATE;
-export const updateInflationRate = async (newRate: number) => { MOCK_INFLATION_RATE = newRate; };
+export const updateInflationRate = async (newRate: number) => { 
+  MOCK_INFLATION_RATE = newRate; 
+  localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE));
+  socket.emit('update_state', { key: 'mockInflation', value: MOCK_INFLATION_RATE });
+};
 
 
 // PROMPT 7.2-001: GLOBAL 4-SECTION FUND MODEL
@@ -393,7 +552,10 @@ try {
     const sProjects = localStorage.getItem('finboard_projects');
     if (sProjects) MOCK_PROJECTS = JSON.parse(sProjects);
 } catch(e) {}
-const syncProjects = () => localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS));
+const syncProjects = () => {
+    localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS));
+    socket.emit('update_state', { key: 'projects', value: MOCK_PROJECTS });
+};
 
 export const getProjects = async (): Promise<ProjectRevenue[]> => [...MOCK_PROJECTS];
 
@@ -444,7 +606,10 @@ try {
     const sServices = localStorage.getItem('finboard_services');
     if (sServices) MOCK_SERVICES = JSON.parse(sServices);
 } catch(e) {}
-const syncServices = () => localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES));
+const syncServices = () => {
+    localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES));
+    socket.emit('update_state', { key: 'services', value: MOCK_SERVICES });
+};
 
 export const getServices = async (): Promise<ServiceRevenue[]> => [...MOCK_SERVICES];
 
@@ -491,7 +656,10 @@ try {
     const sParts = localStorage.getItem('finboard_parts');
     if (sParts) MOCK_PARTS = JSON.parse(sParts);
 } catch(e) {}
-const syncParts = () => localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS));
+const syncParts = () => {
+    localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS));
+    socket.emit('update_state', { key: 'parts', value: MOCK_PARTS });
+};
 
 
 export const getParts = async (): Promise<PartRevenue[]> => [...MOCK_PARTS];
@@ -623,6 +791,7 @@ export const getAnnualBudget = async (year: number) => {
 export const updateAnnualBudget = async (year: number, fundId: string, amount: number) => {
   if (!ANNUAL_BUDGETS[year]) ANNUAL_BUDGETS[year] = {};
   ANNUAL_BUDGETS[year][fundId] = amount;
+  socket.emit('update_state', { key: 'annualBudgets', value: ANNUAL_BUDGETS });
 };
 
 // --- DEBT SERVICE (PROMPT 6.1-011) ---
@@ -709,6 +878,7 @@ export const updateBankAccountMapping = async (accountId: string, categoryId: st
   const index = BANK_ACCOUNTS.findIndex(b => b.id === accountId);
   if (index !== -1) {
     BANK_ACCOUNTS[index] = { ...BANK_ACCOUNTS[index], mappedCategoryId: categoryId };
+    socket.emit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS });
   }
 };
 
@@ -731,6 +901,7 @@ export const updateBankAccountDetails = async (accountId: string, updates: Parti
   const index = BANK_ACCOUNTS.findIndex(b => b.id === accountId);
   if (index !== -1) {
     BANK_ACCOUNTS[index] = { ...BANK_ACCOUNTS[index], ...updates };
+    socket.emit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS });
   }
 };
 
@@ -738,6 +909,7 @@ export const updateBankAccountSyncStatus = async (accountId: string, isAuto: boo
   const index = BANK_ACCOUNTS.findIndex(b => b.id === accountId);
   if (index !== -1) {
     BANK_ACCOUNTS[index] = { ...BANK_ACCOUNTS[index], isAutoSync: isAuto };
+    socket.emit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS });
   }
 };
 
@@ -749,6 +921,7 @@ export const updateBankAccountBalance = async (accountId: string, newBalance: nu
       currentBalance: newBalance,
       lastSync: new Date().toISOString() 
     };
+    socket.emit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS });
   }
 };
 
@@ -764,6 +937,7 @@ export const addManualBankAccount = async (): Promise<BankAccount> => {
     isAutoSync: false,
   };
   BANK_ACCOUNTS.push(newAccount);
+  socket.emit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS });
   return newAccount;
 };
 
@@ -786,6 +960,9 @@ export const syncBankAccounts = async (): Promise<BankAccount[]> => {
     MOCK_RATES.USD = 2.65 + Math.random() * 0.1;
     MOCK_RATES.EUR = 2.85 + Math.random() * 0.1;
     MOCK_INFLATION_RATE = 3.0 + Math.random() * 0.5;
+    socket.emit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS });
+    socket.emit('update_state', { key: 'mockRates', value: MOCK_RATES });
+    socket.emit('update_state', { key: 'mockInflation', value: MOCK_INFLATION_RATE });
     return [...BANK_ACCOUNTS];
 };
 
@@ -1150,6 +1327,62 @@ export const getBoardSession = async (): Promise<BoardSession | null> => {
     return BOARD_SESSIONS.find(s => s.isActive) || null;
 };
 
+// === BOARD SESSION LIFECYCLE (persist open/close + step) ===
+
+export const openBoardSession = async (user: User): Promise<BoardSession> => {
+    // Close any previously active sessions
+    BOARD_SESSIONS.forEach(s => {
+        if (s.isActive) {
+            s.isActive = false;
+            s.endTime = s.endTime || new Date().toISOString();
+        }
+    });
+
+    const now = new Date();
+    const thursday = new Date(now);
+    const dayOfWeek = now.getDay();
+    const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
+    if (daysUntilThursday === 0 && now.getHours() >= 16) {
+        thursday.setDate(now.getDate() + 7);
+    } else {
+        thursday.setDate(now.getDate() + daysUntilThursday);
+    }
+    thursday.setHours(16, 0, 0, 0);
+
+    const session: BoardSession = {
+        id: `board_${Date.now()}`,
+        weekDate: thursday.toISOString(),
+        startTime: now.toISOString(),
+        isActive: true,
+        attendees: [user.id],
+        initiatorId: user.id,
+    };
+
+    BOARD_SESSIONS.push(session);
+    syncBoardSessions();
+    localStorage.setItem('finboard_council_step', '1');
+    return session;
+};
+
+export const closeBoardSession = async (): Promise<void> => {
+    const active = BOARD_SESSIONS.find(s => s.isActive);
+    if (active) {
+        active.isActive = false;
+        active.endTime = new Date().toISOString();
+    }
+    syncBoardSessions();
+    localStorage.removeItem('finboard_council_step');
+};
+
+export const saveBoardStep = (step: number): void => {
+    localStorage.setItem('finboard_council_step', String(step));
+};
+
+export const getSavedBoardStep = (): number => {
+    const saved = localStorage.getItem('finboard_council_step');
+    return saved !== null ? parseInt(saved, 10) : 0;
+};
+
 export const getFdFinalRequests = async (): Promise<ExpenseRequest[]> => {
     return REQUESTS.filter(r => r.status === RequestStatus.FD_APPROVED);
 };
@@ -1168,7 +1401,10 @@ export const getAccountingRequests = async (): Promise<ExpenseRequest[]> => {
 };
 
 // User Management Mocks
-const syncUsers = () => localStorage.setItem('finboard_users', JSON.stringify(USERS));
+const syncUsers = () => {
+    localStorage.setItem('finboard_users', JSON.stringify(USERS));
+    socket.emit('update_state', { key: 'users', value: USERS });
+};
 
 export const getAllUsers = async (): Promise<User[]> => Object.values(USERS);
 export const addUserMock = async (data: Omit<User, 'id'>) => { 

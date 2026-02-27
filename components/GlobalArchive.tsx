@@ -35,8 +35,7 @@ export const GlobalArchive: React.FC<GlobalArchiveProps> = ({ user }) => {
       const archived = data.filter(r => 
         r.status === RequestStatus.PAID || 
         r.status === RequestStatus.REJECTED ||
-        r.status === RequestStatus.APPROVED_FOR_PAYMENT ||
-        r.status === RequestStatus.RETURNED_TO_SENDER // Now included in archive
+        r.status === RequestStatus.APPROVED_FOR_PAYMENT
       );
       setRequests(archived);
       
