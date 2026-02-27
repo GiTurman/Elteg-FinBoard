@@ -71,34 +71,13 @@ async function startServer() {
 
     socket.on('update_state', (data) => {
       // Update specific part of state
-      const { key, action, id, changes, value, userRole } = data;
-      
-      // Basic role verification (prevent unauthorized state changes)
-      const isAllowed = userRole && ["FOUNDER", "CEO", "FIN_DIRECTOR"].includes(userRole);
-      if (!isAllowed) {
-        console.warn(`Unauthorized update attempt by role: ${userRole}`);
-        socket.emit('auth_error', { message: 'Insufficient permissions.' });
-        return;
-      }
+      const { key, value } = data;
 
       if (globalState.hasOwnProperty(key)) {
-        if (action === 'update_item' && Array.isArray(globalState[key])) {
-          const index = globalState[key].findIndex((item: any) => item.id === id);
-          if (index !== -1) {
-            globalState[key][index] = { ...globalState[key][index], ...changes };
-          }
-        } else if (action === 'add_item' && Array.isArray(globalState[key])) {
-          globalState[key].push(value);
-        } else if (action === 'delete_item' && Array.isArray(globalState[key])) {
-          globalState[key] = globalState[key].filter((item: any) => item.id !== id);
-        } else {
-          // Fallback to full replacement
-          globalState[key] = value;
-        }
-
+        globalSate[key] = value;
         saveState(); // Persist to file
         // Broadcast to all other clients
-        socket.broadcast.emit('state_updated', data);
+        socket.broadcast.emit('state_updated', { key, value });
       }
     });
 

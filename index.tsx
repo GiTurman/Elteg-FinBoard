@@ -8,6 +8,18 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
+
+window.addEventListener('unhandledrejection', (event) => {
+  // Suppress benign WebSocket errors from Vite HMR
+  if (event.reason && (
+    (event.reason.message && event.reason.message.includes('WebSocket')) ||
+    (event.reason.toString && event.reason.toString().includes('WebSocket'))
+  )) {
+    event.preventDefault();
+    console.warn('Suppressed benign WebSocket rejection:', event.reason);
+  }
+});
+
 root.render(
   <React.StrictMode>
     <App />
