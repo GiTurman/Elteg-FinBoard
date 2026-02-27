@@ -30,6 +30,7 @@ import {
   closeBoardSession,
   saveBoardStep,
   getSavedBoardStep,
+  getArchivedBoardSessions,
 } from '../services/mockService';
 import { DirectorApprovals } from './DirectorApprovals';
 import { DebtManagementView } from './DebtManagementView';
@@ -771,7 +772,16 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
           <>
              {currentStep === 0 && (
                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
-                     
+                     {!isTopLevel ? (
+                         <div className="flex flex-col items-center justify-center py-24 text-center">
+                             <div className="w-20 h-20 bg-red-50 text-red-400 rounded-full flex items-center justify-center mb-6">
+                                 <Lock size={40} />
+                             </div>
+                             <h3 className="text-xl font-bold text-gray-900 mb-2">წვდომა შეზღუდულია</h3>
+                             <p className="text-gray-500 max-w-md">არქივის დათვალიერების უფლება აქვთ მხოლოდ დამფუძნებელს, დირექტორს და ფინანსურ დირექტორს.</p>
+                         </div>
+                     ) : (
+                     <>
                      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-gray-100 pb-6">
                          <h2 className="text-2xl font-bold flex items-center gap-3">
                              <div className="p-2 bg-gray-100 text-gray-600 rounded-lg"><Archive size={24} /></div>
@@ -935,6 +945,8 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                              </tbody>
                          </table>
                      </div>
+                     </>
+                     )}
                  </div>
              )}
 

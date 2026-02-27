@@ -1421,6 +1421,10 @@ export const getSavedBoardStep = (): number => {
     return saved !== null ? parseInt(saved, 10) : 0;
 };
 
+export const getArchivedBoardSessions = async (): Promise<BoardSession[]> => {
+    return BOARD_SESSIONS.filter(s => !s.isActive).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+};
+
 export const getFdFinalRequests = async (): Promise<ExpenseRequest[]> => {
     return REQUESTS.filter(r => r.status === RequestStatus.FD_APPROVED);
 };
