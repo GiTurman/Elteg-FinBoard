@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { getBankAccounts, getRevenueCategories, getRealTimeFundBalances, getFinancialCouncilSessions, getExpenseFunds, getAllRequests, dispatchDirectivesToAccounting, getAnnualBudget } from '../services/mockService';
+import { getBankAccounts, getRevenueCategories, getRealTimeFundBalances, getFinancialCouncilSessions, getExpenseFunds, getAllRequests, dispatchDirectivesToAccounting, getAnnualBudget, useSync } from '../services/mockService';
 import { FundBalance, User, UserRole, ExpenseRequest, DirectiveSnapshot } from '../types';
 import { formatNumber } from '../utils/formatters';
 import { Briefcase, Download, RefreshCw, Eye, EyeOff, Search, Circle, Send, X, CheckCircle2, ArrowRightLeft } from 'lucide-react';
@@ -780,6 +780,7 @@ export const ManagementView: React.FC<{ user: User }> = ({ user }) => {
   const [directiveOverrides, setDirectiveOverrides] = useState<Record<string, number>>({});
   const [hiddenFunds, setHiddenFunds] = useState<Record<string, boolean>>({});
   const [isPeriodLocked, setIsPeriodLocked] = useState(false);
+  const syncTrigger = useSync();
 
   const fetchData = async () => {
     setLoading(true);
@@ -822,7 +823,7 @@ export const ManagementView: React.FC<{ user: User }> = ({ user }) => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [syncTrigger]);
 
   const handleStartNewWeek = async () => {
       setDirectiveOverrides({});

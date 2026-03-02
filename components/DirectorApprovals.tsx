@@ -9,7 +9,8 @@ import {
   updateRequestDetails,
   getBoardSession,
   getExpenseFunds,
-  getRealTimeFundBalances
+  getRealTimeFundBalances,
+  useSync
 } from '../services/mockService';
 import { 
   Check, 
@@ -121,6 +122,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
   
   const [selectedBoardDateStr, setSelectedBoardDateStr] = useState<string>(initialSelectedDate || '');
   const [notes, setNotes] = useState<Record<string, { director?: string, fin?: string, discussion?: string }>>({});
+  const syncTrigger = useSync();
 
   const isFinDirector = user.role === UserRole.FIN_DIRECTOR;
   const isDirectorLevel = user.role === UserRole.CEO || user.role === UserRole.FOUNDER;
@@ -152,7 +154,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
 
   useEffect(() => {
     fetchBoardRequests();
-  }, []); 
+  }, [syncTrigger]); 
 
   const groupedRequests = useMemo(() => {
     const groups: Record<string, ExpenseRequest[]> = {};

@@ -11,7 +11,8 @@ import {
     updateDebtor, 
     updateCreditor, 
     addDebtor, 
-    addCreditor 
+    addCreditor,
+    useSync
 } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 
@@ -157,6 +158,7 @@ export const DebtManagementView: React.FC = () => {
   const [editFormData, setEditFormData] = useState<Partial<DebtRecord>>({});
   const [isAdding, setIsAdding] = useState(false);
   const [newRecord, setNewRecord] = useState(defaultNewRecord);
+  const syncTrigger = useSync();
 
   const activeData = activeTab === 'debtors' ? debtors : creditors;
   
@@ -170,7 +172,7 @@ export const DebtManagementView: React.FC = () => {
   
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [syncTrigger]);
   
   // PROMPT 6.1-005: Calculate Totals
   const totals = useMemo(() => {
