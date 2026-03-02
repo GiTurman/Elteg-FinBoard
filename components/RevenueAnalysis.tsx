@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Download, BarChart2, AlertTriangle, Server, FolderKanban, Plus, Edit2, ChevronDown, ChevronRight, X, Trash2, Package, Archive } from 'lucide-react';
 import { RevenueProjects } from './RevenueProjects';
 import { ServiceRevenue, PartRevenue, ProjectTranche, Currency } from '../types';
-import { getServices, addService, updateService, terminateService, getParts, addPart, updatePart, terminatePart, getCurrencyRates } from '../services/mockService';
+import { getServices, addService, updateService, terminateService, getParts, addPart, updatePart, terminatePart, getCurrencyRates, useSync } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 import { exportGenericToExcel } from '../utils/excelExport';
 
@@ -172,9 +172,10 @@ export const RevenueService: React.FC = () => {
     const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({ C: true, D: true, E: true });
     const [isTerminationModalOpen, setIsTerminationModalOpen] = useState(false);
     const [terminatingService, setTerminatingService] = useState<ServiceRevenue | null>(null);
+    const syncTrigger = useSync();
 
     const fetchData = async () => { setLoading(true); const [data, currencyRates] = await Promise.all([getServices(), getCurrencyRates()]); setServices(data); setRates(currencyRates); setLoading(false); };
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { fetchData(); }, [syncTrigger]);
 
     const activeServices = useMemo(() => services.filter(s => s.status === 'active'), [services]);
     const terminatedServices = useMemo(() => services.filter(s => s.status === 'terminated'), [services]);
@@ -317,9 +318,10 @@ export const RevenueParts: React.FC = () => {
     const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({ C: true, D: true, E: true });
     const [isTerminationModalOpen, setIsTerminationModalOpen] = useState(false);
     const [terminatingPart, setTerminatingPart] = useState<PartRevenue | null>(null);
+    const syncTrigger = useSync();
 
     const fetchData = async () => { setLoading(true); const [data, currencyRates] = await Promise.all([getParts(), getCurrencyRates()]); setParts(data); setRates(currencyRates); setLoading(false); };
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { fetchData(); }, [syncTrigger]);
     
     const activeParts = useMemo(() => parts.filter(p => p.status === 'active'), [parts]);
     const terminatedParts = useMemo(() => parts.filter(p => p.status === 'terminated'), [parts]);

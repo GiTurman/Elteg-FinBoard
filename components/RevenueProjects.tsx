@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { ProjectRevenue, ProjectTranche, Currency } from '../types';
-import { getProjects, addProject, updateProject, terminateProject, getCurrencyRates } from '../services/mockService';
+import { getProjects, addProject, updateProject, terminateProject, getCurrencyRates, useSync } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 import { FolderKanban, Plus, Download, Edit2, ChevronDown, ChevronRight, Save, X, Trash2, AlertTriangle, Archive } from 'lucide-react';
 import { exportGenericToExcel } from '../utils/excelExport';
@@ -201,6 +201,7 @@ export const RevenueProjects: React.FC = () => {
     // Termination state
     const [isTerminationModalOpen, setIsTerminationModalOpen] = useState(false);
     const [terminatingProject, setTerminatingProject] = useState<ProjectRevenue | null>(null);
+    const syncTrigger = useSync();
 
 
     const fetchData = async () => {
@@ -211,7 +212,7 @@ export const RevenueProjects: React.FC = () => {
         setLoading(false);
     };
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { fetchData(); }, [syncTrigger]);
 
     const activeProjects = useMemo(() => projects.filter(p => p.status === 'active'), [projects]);
     const terminatedProjects = useMemo(() => projects.filter(p => p.status === 'terminated'), [projects]);

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole } from '../types';
-import { getAnnualBudget, updateAnnualBudget, getHiddenFunds, toggleFundVisibility, toggleSectionVisibility } from '../services/mockService';
+import { getAnnualBudget, updateAnnualBudget, getHiddenFunds, toggleFundVisibility, toggleSectionVisibility, useSync } from '../services/mockService';
 import { TrendingUp, History, Lock, Edit, CheckSquare, Eye, EyeOff } from 'lucide-react';
 import { formatNumber } from '../utils/formatters';
 
@@ -49,6 +49,7 @@ export const Budgeting: React.FC<BudgetingProps> = ({ user, year }) => {
   const isCurrentPlanningYear = year === new Date().getFullYear() + 1;
   const [isPlanningMode, setIsPlanningMode] = useState(false);
   const isTopLevel = [UserRole.FOUNDER, UserRole.CEO, UserRole.FIN_DIRECTOR].includes(user.role);
+  const syncTrigger = useSync();
 
   useEffect(() => {
     const loadBudget = async () => {
@@ -128,7 +129,7 @@ export const Budgeting: React.FC<BudgetingProps> = ({ user, year }) => {
     };
     loadBudget();
     setIsPlanningMode(false);
-  }, [year]);
+  }, [year, syncTrigger]);
   
   const handleToggleFundVisibility = async (fundId: string) => {
     await toggleFundVisibility(fundId);

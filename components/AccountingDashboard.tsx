@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { User, ExpenseRequest, RequestStatus, DirectiveSnapshot, UserRole } from '../types';
-import { getAccountingRequests, updateRequestStatus, getDispatchedDirectives, updateDirectiveStatus, USERS, getInvoicesForAccountant } from '../services/mockService';
+import { getAccountingRequests, updateRequestStatus, getDispatchedDirectives, updateDirectiveStatus, USERS, getInvoicesForAccountant, useSync } from '../services/mockService';
 import * as XLSX from 'xlsx';
 import { 
   Calculator,
@@ -23,6 +23,7 @@ export const AccountantDirectivesView: React.FC<{ user: User }> = ({ user }) => 
   const [directives, setDirectives] = useState<DirectiveSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const syncTrigger = useSync();
 
   const fetchData = async () => {
     setLoading(true);
@@ -94,7 +95,7 @@ export const AccountantDirectivesView: React.FC<{ user: User }> = ({ user }) => 
     const handleStorage = () => fetchData();
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, []);
+  }, [syncTrigger]);
 
   const handleMarkAsProcessed = async (directive: DirectiveSnapshot) => {
     if (window.confirm("ნამდვილად გსურთ დირექტივის შესრულებულად მონიშვნა?")) {
@@ -269,6 +270,7 @@ export const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ user }
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'archive' | 'invoices'>('pending');
   const [invoicesCount, setInvoicesCount] = useState(0);
+  const syncTrigger = useSync();
 
   const fetchRequests = async () => {
     // Uses DISPATCHED_TO_ACCOUNTING filter + PAID and fetches pending invoices count
@@ -283,7 +285,7 @@ export const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ user }
 
   useEffect(() => {
     fetchRequests();
-  }, []);
+  }, [syncTrigger]);
 
   const handlePay = async (requestId: string) => {
     setProcessingId(requestId);

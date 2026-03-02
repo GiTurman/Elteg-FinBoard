@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Invoice, InvoiceStatus, InvoiceItem, User } from '../types';
-import { getInvoicesForAccountant, getGeneratedInvoices, updateInvoice, updateInvoiceStatus } from '../services/mockService';
+import { getInvoicesForAccountant, getGeneratedInvoices, updateInvoice, updateInvoiceStatus, useSync } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 import { CheckCircle2, ChevronDown, ChevronRight, Edit2, FileCheck, Send, Download, Save, Clock, Printer, X, Edit } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -164,6 +164,7 @@ export const AccountantInvoicesView: React.FC<{ user: User }> = ({ user }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const syncTrigger = useSync();
   
   // State for inline editing items
   const [editingItems, setEditingItems] = useState<InvoiceItem[]>([]);
@@ -177,7 +178,7 @@ export const AccountantInvoicesView: React.FC<{ user: User }> = ({ user }) => {
 
   useEffect(() => {
     fetchInvoices();
-  }, []);
+  }, [syncTrigger]);
 
   const handleExpand = (invoice: Invoice) => {
     if (expandedId === invoice.id) {
@@ -362,6 +363,7 @@ export const AccountantInvoicesView: React.FC<{ user: User }> = ({ user }) => {
 export const GeneratedInvoicesView: React.FC<{ user: User }> = ({ user }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const syncTrigger = useSync();
   
   // State for Print Preview Modal
   const [printInvoice, setPrintInvoice] = useState<Invoice | null>(null);
@@ -381,7 +383,7 @@ export const GeneratedInvoicesView: React.FC<{ user: User }> = ({ user }) => {
 
   useEffect(() => {
     fetchInvoices();
-  }, [user.id]);
+  }, [user.id, syncTrigger]);
 
   const handleShowPrintModal = (invoice: Invoice) => {
     setPrintInvoice(invoice);

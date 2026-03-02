@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, ExpenseRequest, RequestStatus } from '../types';
-import { getAllRequests } from '../services/mockService';
+import { getAllRequests, useSync } from '../services/mockService';
 import { 
   Archive, 
   Calendar, 
@@ -28,6 +28,7 @@ export const GlobalArchive: React.FC<GlobalArchiveProps> = ({ user }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('All');
   const [expandedSessions, setExpandedSessions] = useState<Record<string, boolean>>({});
+  const syncTrigger = useSync();
 
   useEffect(() => {
     const fetch = async () => {
@@ -47,7 +48,7 @@ export const GlobalArchive: React.FC<GlobalArchiveProps> = ({ user }) => {
       setLoading(false);
     };
     fetch();
-  }, []);
+  }, [syncTrigger]);
 
   const departments = useMemo(() => {
     const depts = new Set(requests.map(r => r.department));
