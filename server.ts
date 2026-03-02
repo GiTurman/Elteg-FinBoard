@@ -74,7 +74,7 @@ async function startServer() {
       const { key, value } = data;
 
       if (globalState.hasOwnProperty(key)) {
-        globalSate[key] = value;
+        globalState[key] = value;
         saveState(); // Persist to file
         // Broadcast to all other clients
         socket.broadcast.emit('state_updated', { key, value });
