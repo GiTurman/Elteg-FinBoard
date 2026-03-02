@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole } from '../types';
-import { getAnnualBudget, getBudgetAnalysisComments, updateBudgetAnalysisComment } from '../services/mockService';
+import { getAnnualBudget, getBudgetAnalysisComments, updateBudgetAnalysisComment, useSync } from '../services/mockService';
 import { Scale, TrendingUp, TrendingDown } from 'lucide-react';
 import { formatNumber } from '../utils/formatters';
 
@@ -32,6 +32,7 @@ export const BudgetAnalysis: React.FC<BudgetAnalysisProps> = ({ user }) => {
   const [comparisonData, setComparisonData] = useState<ComparisonItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState<Record<string, string>>({});
+  const syncTrigger = useSync();
 
   useEffect(() => {
     const loadData = async () => {
@@ -68,7 +69,7 @@ export const BudgetAnalysis: React.FC<BudgetAnalysisProps> = ({ user }) => {
       setLoading(false);
     };
     loadData();
-  }, []);
+  }, [syncTrigger]);
   
   const handleCommentChange = (id: string, value: string) => {
     setComments(prev => ({ ...prev, [id]: value }));

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Save, RefreshCw } from 'lucide-react';
-import { getCurrencyRates, updateCurrencyRates, getInflationRate, updateInflationRate } from '../services/mockService';
+import { getCurrencyRates, updateCurrencyRates, getInflationRate, updateInflationRate, useSync } from '../services/mockService';
 import { Language } from '../types';
 
 export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) => {
@@ -10,6 +10,7 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
   const [inflation, setInflation] = useState(0);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const syncTrigger = useSync();
 
   useEffect(() => {
     const fetchRates = async () => {
@@ -23,7 +24,7 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
       setLoading(false);
     };
     fetchRates();
-  }, []);
+  }, [syncTrigger]);
 
   const handleSave = async () => {
     setSaving(true);

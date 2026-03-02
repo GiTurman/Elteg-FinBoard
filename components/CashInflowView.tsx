@@ -13,7 +13,8 @@ import {
     updateCurrentWeekCashInflowEntry,
     deleteCurrentWeekCashInflowEntry,
     finalizeCurrentWeek,
-    USERS
+    USERS,
+    useSync
 } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 
@@ -110,6 +111,7 @@ const CashInflowAnalysisModal: React.FC<AnalysisModalProps> = ({ isOpen, onClose
 // --- Main Unified View Component ---
 export const CashInflowView: React.FC<{ user: User }> = ({ user }) => {
   const isTopLevel = [UserRole.FOUNDER, UserRole.FIN_DIRECTOR, UserRole.CEO].includes(user.role);
+  const syncTrigger = useSync();
   
   const [archiveData, setArchiveData] = useState<Record<string, CashInflowRecord[]>>({});
   const [currentWeekEntries, setCurrentWeekEntries] = useState<CashInflowRecord[]>([]);
@@ -136,7 +138,7 @@ export const CashInflowView: React.FC<{ user: User }> = ({ user }) => {
 
   useEffect(() => {
     fetchData();
-  }, [user]);
+  }, [user, syncTrigger]);
   
   const handleAddRow = async () => {
       const newEntry = await addCurrentWeekCashInflowEntry({}, user.id);

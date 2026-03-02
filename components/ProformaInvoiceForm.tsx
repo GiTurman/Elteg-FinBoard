@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Currency, InvoiceItem, Invoice, InvoiceStatus } from '../types';
 import { Plus, Trash2, Send, FileText, Calculator, Archive, Clock, CheckCircle2 } from 'lucide-react';
 import { formatNumber } from '../utils/formatters';
-import { createInvoice, getProformaInvoicesForUser } from '../services/mockService'; 
+import { createInvoice, getProformaInvoicesForUser, useSync } from '../services/mockService'; 
 
 export const ProformaInvoiceForm: React.FC<{ user: any }> = ({ user }) => { 
   const [clientName, setClientName] = useState('');
@@ -27,6 +27,7 @@ export const ProformaInvoiceForm: React.FC<{ user: any }> = ({ user }) => {
   
   // ARCHIVE STATE
   const [archive, setArchive] = useState<Invoice[]>([]);
+  const syncTrigger = useSync();
   
   const fetchArchive = async () => {
     const data = await getProformaInvoicesForUser(user.id);
@@ -35,7 +36,7 @@ export const ProformaInvoiceForm: React.FC<{ user: any }> = ({ user }) => {
 
   useEffect(() => {
     fetchArchive();
-  }, [user.id]);
+  }, [user.id, syncTrigger]);
 
   const handleAddItem = () => {
     setItems(prev => [

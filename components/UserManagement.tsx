@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { User, UserRole, Language } from '../types';
-import { getAllUsers, addUserMock, updateUserMock, deleteUserMock } from '../services/mockService';
+import { getAllUsers, addUserMock, updateUserMock, deleteUserMock, useSync } from '../services/mockService';
 // In production, uncomment the following line and replace the mock functions:
 // import { fetchUsers, addUser, updateUser, deleteUser } from '../services/firebaseUserService';
 import { 
@@ -52,6 +52,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, lan
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const syncTrigger = useSync();
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,7 +76,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, lan
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [syncTrigger]);
 
   const getManagerName = (managerId?: string) => {
     if (!managerId) return <span className="text-gray-400 italic">Top Level</span>;

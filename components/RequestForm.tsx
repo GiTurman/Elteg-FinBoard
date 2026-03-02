@@ -16,7 +16,7 @@ import {
   AlertCircle,
   Clock
 } from 'lucide-react';
-import { submitRequest } from '../services/mockService';
+import { submitRequest, useSync } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 
 interface RequestFormProps {
@@ -56,6 +56,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
   const [loading, setLoading] = useState(false);
   const [deadlineInfo, setDeadlineInfo] = useState(calculateDeadlineInfo());
   const isExempt = [UserRole.FIN_DIRECTOR, UserRole.CEO, UserRole.FOUNDER].includes(user.role);
+  const syncTrigger = useSync();
 
   useEffect(() => {
     const timer = setInterval(() => {
