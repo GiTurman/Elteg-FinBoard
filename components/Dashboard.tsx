@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 // FIX: Import UserRole to use in component logic.
 import { User, ExpenseRequest, RequestStatus, UserRole } from '../types';
-import { getRequestsForUser, getArchivedRequestsForUser, updateRequestStatus, resubmitRequest } from '../services/mockService';
+import { getRequestsForUser, getArchivedRequestsForUser, updateRequestStatus, resubmitRequest, useSync } from '../services/mockService';
 import { exportToExcel } from '../utils/excelExport';
 import { formatNumber } from '../utils/formatters';
 import { 
@@ -101,6 +101,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'active' | 'archive'>('active');
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>({});
+  const syncTrigger = useSync();
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -120,7 +121,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchRequests(); }, [user.id]);
+  useEffect(() => { fetchRequests(); }, [user.id, syncTrigger]);
 
   const handleAction = async (id: string, action: 'approve' | 'reject' | 'return') => {
     setProcessingId(id);

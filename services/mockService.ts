@@ -139,6 +139,18 @@ socket.on('state_updated', (data) => {
   window.dispatchEvent(new Event('finboard_sync'));
 });
 
+import { useState, useEffect } from 'react';
+
+export const useSync = () => {
+  const [syncTrigger, setSyncTrigger] = useState(0);
+  useEffect(() => {
+    const handleSync = () => setSyncTrigger(prev => prev + 1);
+    window.addEventListener('finboard_sync', handleSync);
+    return () => window.removeEventListener('finboard_sync', handleSync);
+  }, []);
+  return syncTrigger;
+};
+
 // Mock Users Structure
 export const USERS: Record<string, User> = {
   // --- TOP LEVEL ---

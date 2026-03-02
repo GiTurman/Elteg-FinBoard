@@ -31,6 +31,7 @@ import {
   saveBoardStep,
   getSavedBoardStep,
   getArchivedBoardSessions,
+  useSync
 } from '../services/mockService';
 import { DirectorApprovals } from './DirectorApprovals';
 import { DebtManagementView } from './DebtManagementView';
@@ -190,6 +191,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
 
   const isFinDirector = user.role === UserRole.FIN_DIRECTOR;
   const isTopLevel = user.role === UserRole.FOUNDER || user.role === UserRole.FIN_DIRECTOR || user.role === UserRole.CEO;
+  const syncTrigger = useSync();
   
   const calculatedRevenue = useMemo(() => {
     return revenueCategories.map(cat => {
@@ -279,7 +281,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       setLoading(false);
     };
     init();
-  }, [currentStep, selectedSessionDate]); 
+  }, [currentStep, selectedSessionDate, syncTrigger]); 
 
   useEffect(() => {
     if (currentStep === 11) { 
@@ -289,7 +291,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       };
       fetchFinal();
     }
-  }, [currentStep]);
+  }, [currentStep, syncTrigger]);
 
   useEffect(() => {
     if (currentStep === 12 || currentStep === 13) { 
@@ -299,7 +301,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       };
       fetchStep12Data();
     }
-  }, [currentStep]);
+  }, [currentStep, syncTrigger]);
   
   const handleGenerateReport = async () => {
     setIsReportLoading(true);
