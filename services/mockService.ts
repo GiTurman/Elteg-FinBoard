@@ -1211,7 +1211,9 @@ const createNewRequest = (details: Partial<ExpenseRequest>, user: User): Expense
     priority: Priority.LOW,
     alternativesChecked: false,
     selectedOptionReason: '',
-    status: RequestStatus.WAITING_DEPT_APPROVAL,
+    status: (user.role === UserRole.FOUNDER || user.role === UserRole.CEO || user.role === UserRole.FIN_DIRECTOR) 
+            ? RequestStatus.COUNCIL_REVIEW 
+            : RequestStatus.WAITING_DEPT_APPROVAL,
     createdAt: now.toISOString(),
     boardDate: determineBoardDateForRequest(now, user.role).toISOString(),
     ...details
@@ -1286,10 +1288,21 @@ export const getArchivedRequestsForUser = async (user: User): Promise<ExpenseReq
 export const updateRequestStatus = async (requestId: string, newStatus: RequestStatus, actorId: string): Promise<void> => {
   const index = REQUESTS.findIndex(r => r.id === requestId);
   if (index !== -1) {
+    const actor = Object.values(USERS).find(u => u.id === actorId);
+    const updates: Partial<ExpenseRequest> = {
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+    };
+
+    // If moving to Council Review, update the board date to the next upcoming Thursday
+    // to ensure it appears in the current/upcoming board session
+    if (newStatus === RequestStatus.COUNCIL_REVIEW) {
+        updates.boardDate = determineBoardDateForRequest(new Date(), actor?.role || UserRole.EMPLOYEE).toISOString();
+    }
+
     REQUESTS[index] = { 
         ...REQUESTS[index], 
-        status: newStatus, 
-        updatedAt: new Date().toISOString() 
+        ...updates
     };
 
     if (newStatus === RequestStatus.PAID) {
@@ -1349,7 +1362,6 @@ export const getBoardDateForRequest = (createdAt: string): Date => {
 // --- DATA FOR FINANCIAL COUNCIL ---
 export const getDirectorBoardRequests = async (): Promise<ExpenseRequest[]> => {
   const relevantStatuses = [
-    RequestStatus.WAITING_DEPT_APPROVAL,
     RequestStatus.COUNCIL_REVIEW,
     RequestStatus.FD_APPROVED,
   ];

@@ -30,6 +30,7 @@ import { formatNumber } from '../utils/formatters';
 interface DirectorApprovalsProps {
   user: User;
   currentStep?: number;
+  initialSelectedDate?: string;
 }
 
 const formatDate = (date: Date) => {
@@ -111,14 +112,14 @@ const PriorityBadge = ({ priority }: { priority: Priority }) => {
 };
 
 
-export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, currentStep }) => {
+export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, currentStep, initialSelectedDate }) => {
   const [allRequests, setAllRequests] = useState<ExpenseRequest[]>([]);
   const [funds, setFunds] = useState<ExpenseFund[]>([]);
   const [fundBalances, setFundBalances] = useState<FundBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   
-  const [selectedBoardDateStr, setSelectedBoardDateStr] = useState<string>('');
+  const [selectedBoardDateStr, setSelectedBoardDateStr] = useState<string>(initialSelectedDate || '');
   const [notes, setNotes] = useState<Record<string, { director?: string, fin?: string, discussion?: string }>>({});
 
   const isFinDirector = user.role === UserRole.FIN_DIRECTOR;
@@ -171,7 +172,8 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
     if (availableDates.length > 0 && !selectedBoardDateStr) {
       const now = new Date();
       now.setHours(0,0,0,0);
-      const upcoming = availableDates.find(d => new Date(d) >= now);
+      // Sort ascending to find the CLOSEST upcoming date
+      const upcoming = [...availableDates].sort((a, b) => new Date(a).getTime() - new Date(b).getTime()).find(d => new Date(d) >= now);
       setSelectedBoardDateStr(upcoming || availableDates[0]);
     }
   }, [availableDates, selectedBoardDateStr]);
