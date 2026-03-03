@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 // FIX: Import FundBalance from types.ts directly
 import { User, UserRole, ExpenseRequest, RequestStatus, BankAccount, RevenueCategory, MasterReportData, DebtRecord, FundBalance } from '../types';
-import { supabase } from '@/lib/supabase';
 import { 
   getFundDistributionRules, 
   getFdFinalRequests, 
@@ -291,25 +290,6 @@ useEffect(() => {
         setFinalRequests(data);
       };
       fetchFinal();
-
-      // Supabase Realtime: სხვა ბრაუზერიდან გამოგზავნილი მოთხოვნა მომენტალურად გამოჩნდება
-      const channel = supabase
-        .channel('council-step11-realtime')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'expenditure_requests' },
-          async () => {
-            // როცა ბაზაში რაიმე იცვლება, თავიდან ჩავტვირთოთ
-            const freshData = await getFdFinalRequests();
-            setFinalRequests(freshData);
-          }
-        )
-        .subscribe();
-
-      // Cleanup: კომპონენტის unmount-ზე გამოვწეროთ არხიდან
-      return () => {
-        supabase.removeChannel(channel);
-      };
     }
   }, [currentStep, syncTrigger]);
 
@@ -650,35 +630,13 @@ useEffect(() => {
   
   const handleTransferToAccounting = async (id: string) => { 
       try { 
-          // 1. ლოკალური mockService განახლება (Socket.io sync)
           await updateRequestStatus(id, RequestStatus.DISPATCHED_TO_ACCOUNTING, user.id); 
-          
-          // 2. Supabase ბაზაში სტატუსის განახლება
-          const { error } = await supabase
-            .from('expenditure_requests')
-            .update({ status: 'DISPATCHED_TO_ACCOUNTING' })
-            .eq('id', id);
-
-          if (error) {
-            console.error('Supabase update error:', error);
-          }
-          
-          // 3. UI განახლება
           setFinalRequests(prev => prev.filter(r => r.id !== id)); 
       } catch(e) {
           console.error(e);
           alert("შეცდომა ბუღალტერიაში გადაცემისას");
       } 
   };
-```
-
----
-
-## ⚠️ მნიშვნელოვანი შენიშვნები
-
-**1. ფაილის სახელი და მდებარეობა:**
-```
-lib/supabase.ts    ← არა "superbase.ts"!
   
   const handleReturnToCouncil = async (id: string) => {
     if (!window.confirm("ნამდვილად გსურთ მოთხოვნის დაბრუნება საბჭოს განხილვაზე (ეტაპი 3)?")) return;
