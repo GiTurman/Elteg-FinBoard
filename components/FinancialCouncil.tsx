@@ -33,6 +33,7 @@ import {
   getArchivedBoardSessions,
   useSync
 } from '../services/mockService';
+import { supabase } from '@/lib/supabase';
 import { DirectorApprovals } from './DirectorApprovals';
 import { DebtManagementView } from './DebtManagementView';
 import { 
@@ -142,19 +143,31 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
 
   // Load active board session on mount
   useEffect(() => {
-    const loadSession = async () => {
-      setBoardLoading(true);
-      const session = await getBoardSession();
-      setActiveBoardSession(session);
-      // If no active session, force step to 0 (archive view)
-      if (!session) {
-        setCurrentStepRaw(0);
-        localStorage.removeItem('finboard_council_step');
-      }
-      setBoardLoading(false);
+    const init = async () => {
+      setLoading(true);
+      
+      // რეალური მოთხოვნების წამოღება Supabase-იდან
+      const { data: realRequests } = await supabase
+        .from('expenditure_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (realRequests) setFinalRequests(realRequests as any);
+
+      // REAL-TIME: ავტომატური მოსმენა - თუ ვინმემ ახალი გამოაგზავნა, ეგრევე გამოჩნდება
+      const channel = supabase
+        .channel('db-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenditure_requests' }, async () => {
+          const { data } = await supabase.from('expenditure_requests').select('*').order('created_at', { ascending: false });
+          if (data) setFinalRequests(data as any);
+        })
+        .subscribe();
+
+      setLoading(false);
+      return () => { supabase.removeChannel(channel); };
     };
-    loadSession();
-  }, []);
+    init();
+  }, [syncTrigger]);
 
   const [sessions, setSessions] = useState<FinancialSession[]>([]);
   const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null);
