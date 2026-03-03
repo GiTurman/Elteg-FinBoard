@@ -21,7 +21,7 @@ import {
   AlertOctagon,
   Edit,
   Send,
-  GitPullRequestArrow,
+  GitPullRequest,
   Calendar,
   ChevronDown,
   ChevronRight
