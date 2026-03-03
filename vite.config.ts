@@ -8,16 +8,12 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
-        hmr: false,
       },
       plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, '.'),
+          // ეს ხაზი უზრუნველყოფს, რომ @ ყოველთვის მთავარ საქაღალდეზე მიუთითებდეს
+          "@": path.resolve(__dirname, "./"),
         }
       }
     };
