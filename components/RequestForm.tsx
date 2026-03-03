@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Clock
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase'
 import { submitRequest } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 
@@ -87,14 +88,25 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
     }
     setLoading(true);
     try {
-      await submitRequest({
-        ...formData,
-        totalAmount,
-      }, user);
+      // მონაცემების გაგზავნა Supabase-ში
+      const { error } = await supabase
+        .from('expenditure_requests')
+        .insert([
+          {
+            user_name: user.name,
+            amount: totalAmount,
+            description: formData.description,
+            category: formData.category,
+            status: 'PENDING'
+          }
+        ]);
+
+      if (error) throw error;
+      alert("მოთხოვნა წარმატებით გაიგზავნა!");
       onSuccess();
     } catch (error) {
       console.error(error);
-      alert('შეცდომა მოთხოვნის გაგზავნისას');
+      alert('შეცდომა ბაზაში ჩაწერისას');
     } finally {
       setLoading(false);
     }
