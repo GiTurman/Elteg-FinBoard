@@ -4,8 +4,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, Priority, BankAccount, RevenueCategory, ExpenseFund, FundBalance, DebtRecord, CashInflowRecord, MasterReportData, ProjectRevenue, ServiceRevenue, PartRevenue, DirectiveSnapshot, Invoice, InvoiceStatus } from '../types';
 import { formatNumber } from '../utils/formatters';
 
-import { io } from 'socket.io-client';
-
 const socket = io(window.location.origin, {
   reconnectionAttempts: 5,
   timeout: 10000,
