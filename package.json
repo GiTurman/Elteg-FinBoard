@@ -8,15 +8,19 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-"dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "@supabase/supabase-js": "^2.39.0",
-    "lucide-react": "^0.284.0",
-    "xlsx": "^0.18.5",
-    "framer-motion": "^10.16.4",
-    "recharts": "^2.10.3"
+  "dependencies": {
+    "@google/genai": "^1.39.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "firebase": "^12.8.0",
+     "@supabase/supabase-js": "^2.39.0"
+    "lucide-react": "^0.563.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "^2.12.7",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
