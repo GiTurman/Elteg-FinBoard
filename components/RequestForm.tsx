@@ -100,20 +100,28 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
             description: formData.description,
             category: formData.category,
             status: 'PENDING',
-            // დამატებითი ველები თუ გსურს ცხრილში დაამატო:
-            // item_name: formData.itemName,
-            // priority: formData.priority,
-            // currency: formData.currency
+            item_name: formData.itemName,
+            quantity: formData.quantity,
+            unit_price: formData.unitPrice,
+            currency: formData.currency,
+            priority: formData.priority,
+            revenue_potential: formData.revenuePotential,
+            selection_reason: formData.selectedOptionReason,
+            created_at: new Date().toISOString()
           }
         ]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase Insert Error:', error);
+        throw error;
+      }
 
       alert('მოთხოვნა წარმატებით გაიგზავნა!');
       onSuccess();
     } catch (error: any) {
-      console.error('Supabase Error:', error);
-      alert(`შეცდომა გაგზავნისას: ${error.message || 'უცნობი შეცდომა'}`);
+      console.error('Detailed Error:', error);
+      const errorMessage = error.details || error.message || 'უცნობი შეცდომა';
+      alert(`შეცდომა გაგზავნისას: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
