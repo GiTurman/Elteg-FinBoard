@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        hmr: false,
       },
       plugins: [react()],
       define: {
@@ -16,7 +17,7 @@ export default defineConfig(({ mode }) => {
       },
       resolve: {
         alias: {
-          "@": path.resolve(__dirname, "./"),
+          '@': path.resolve(__dirname, '.'),
         }
       }
     };

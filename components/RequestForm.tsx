@@ -13,10 +13,11 @@ import {
   FileSpreadsheet,
   Tag,
   AlertCircle,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase'
-import { submitRequest } from '../services/mockService';
+// იმპორტი Supabase კლიენტის, რომელიც src/lib/supabase.ts-ში შექმენი
+import { supabase } from '../lib/supabase';
 import { formatNumber } from '../utils/formatters';
 
 interface RequestFormProps {
@@ -38,8 +39,7 @@ const calculateDeadlineInfo = () => {
     }
     
     const timeLeft = deadline.getTime() - now.getTime();
-    const deadlinePassed = now.getDay() === 4 && now.getHours() >= 16;
-
+    
     const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
     const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
@@ -47,10 +47,9 @@ const calculateDeadlineInfo = () => {
 
     return {
       timeLeft: `${days}დ ${hours.toString().padStart(2, '0')}სთ ${minutes.toString().padStart(2, '0')}წთ ${seconds.toString().padStart(2, '0')}წმ`,
-      deadlinePassed: now > deadline, // More accurate check
+      deadlinePassed: now > deadline,
     };
 };
-
 
 export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => {
   const [loading, setLoading] = useState(false);
@@ -82,13 +81,16 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!formData.alternativesChecked) {
       alert("გთხოვთ დაადასტუროთ ბაზრის მოკვლევა.");
       return;
     }
+
     setLoading(true);
+
     try {
-      // მონაცემების გაგზავნა Supabase-ში
+      // ინფორმაციის ჩაწერა Supabase-ის expenditure_requests ცხრილში
       const { error } = await supabase
         .from('expenditure_requests')
         .insert([
@@ -97,16 +99,21 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
             amount: totalAmount,
             description: formData.description,
             category: formData.category,
-            status: 'PENDING'
+            status: 'PENDING',
+            // დამატებითი ველები თუ გსურს ცხრილში დაამატო:
+            // item_name: formData.itemName,
+            // priority: formData.priority,
+            // currency: formData.currency
           }
         ]);
 
       if (error) throw error;
-      alert("მოთხოვნა წარმატებით გაიგზავნა!");
+
+      alert('მოთხოვნა წარმატებით გაიგზავნა!');
       onSuccess();
-    } catch (error) {
-      console.error(error);
-      alert('შეცდომა ბაზაში ჩაწერისას');
+    } catch (error: any) {
+      console.error('Supabase Error:', error);
+      alert(`შეცდომა გაგზავნისას: ${error.message || 'უცნობი შეცდომა'}`);
     } finally {
       setLoading(false);
     }
@@ -117,7 +124,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto font-sans">
+    <div className="space-y-6 max-w-5xl mx-auto font-sans p-4">
       <div className="flex flex-col gap-1 mb-8 border-b border-black pb-4">
         <h1 className="text-3xl font-extrabold text-black tracking-tight uppercase">Expense Request Form</h1>
         <p className="text-gray-500 font-bold">ხარჯვის მოთხოვნის განაცხადი</p>
@@ -140,9 +147,8 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
         </div>
       )}
 
-
       <form onSubmit={handleSubmit} className="bg-white rounded-lg border border-gray-300 shadow-sm overflow-hidden">
-        {/* Header Section: Basic Info */}
+        {/* Header Section */}
         <div className="bg-gray-50 p-6 md:p-8 border-b border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">თარიღი</label>
@@ -159,7 +165,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
             <input 
               type="text" 
               disabled 
-              value={user.department}
+              value={user.department || 'N/A'}
               className="w-full px-3 py-2 bg-gray-200 border border-transparent rounded text-gray-600 font-bold cursor-not-allowed"
             />
           </div>
@@ -225,7 +231,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
                   value={formData.quantity}
-                  onChange={(e) => handleChange('quantity', parseInt(e.target.value))}
+                  onChange={(e) => handleChange('quantity', parseInt(e.target.value) || 0)}
                 />
               </div>
 
@@ -238,7 +244,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
                   value={formData.unitPrice || ''}
-                  onChange={(e) => handleChange('unitPrice', parseFloat(e.target.value))}
+                  onChange={(e) => handleChange('unitPrice', parseFloat(e.target.value) || 0)}
                 />
               </div>
 
@@ -275,7 +281,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
             </div>
           </section>
 
-          {/* Section 2: Justification (DTSQ) */}
+          {/* Section 2: Justification */}
           <section>
             <div className="flex items-center gap-2 mb-6 text-black border-b-2 border-gray-100 pb-2">
               <div className="p-1.5 bg-black text-white rounded"><FileSpreadsheet size={18} /></div>
@@ -324,8 +330,8 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
                         { value: Priority.CRITICAL, label: 'კრიტიკული', color: 'text-purple-600' },
                      ].map(({ value, label, color }) => (
                        <label key={value} className={`
-                          flex items-center gap-3 px-4 py-3 rounded border cursor-pointer transition-all
-                          ${formData.priority === value 
+                         flex items-center gap-3 px-4 py-3 rounded border cursor-pointer transition-all
+                         ${formData.priority === value 
                              ? 'border-black bg-gray-50 ring-1 ring-black' 
                              : 'border-gray-200 hover:border-gray-300'}
                        `}>
@@ -399,11 +405,14 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
             disabled={loading}
             className={`
               flex items-center justify-center gap-2 px-8 py-3 rounded font-bold text-white shadow-lg transition-all uppercase text-sm
-              ${loading ? 'bg-gray-400 cursor-wait' : 'bg-black hover:bg-gray-800 hover:scale-[1.02]'}
+              ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-gray-800 hover:scale-[1.02]'}
             `}
           >
             {loading ? (
-              <span>იგზავნება...</span>
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>იგზავნება...</span>
+              </>
             ) : (
               <>
                 <CheckCircle2 size={18} />

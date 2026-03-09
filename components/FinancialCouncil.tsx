@@ -33,7 +33,6 @@ import {
   getArchivedBoardSessions,
   useSync
 } from '../services/mockService';
-import { supabase } from '@/lib/supabase';
 import { DirectorApprovals } from './DirectorApprovals';
 import { DebtManagementView } from './DebtManagementView';
 import { 
@@ -143,31 +142,19 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
 
   // Load active board session on mount
   useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      
-      // რეალური მოთხოვნების წამოღება Supabase-იდან
-      const { data: realRequests } = await supabase
-        .from('expenditure_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (realRequests) setFinalRequests(realRequests as any);
-
-      // REAL-TIME: ავტომატური მოსმენა - თუ ვინმემ ახალი გამოაგზავნა, ეგრევე გამოჩნდება
-      const channel = supabase
-        .channel('db-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenditure_requests' }, async () => {
-          const { data } = await supabase.from('expenditure_requests').select('*').order('created_at', { ascending: false });
-          if (data) setFinalRequests(data as any);
-        })
-        .subscribe();
-
-      setLoading(false);
-      return () => { supabase.removeChannel(channel); };
+    const loadSession = async () => {
+      setBoardLoading(true);
+      const session = await getBoardSession();
+      setActiveBoardSession(session);
+      // If no active session, force step to 0 (archive view)
+      if (!session) {
+        setCurrentStepRaw(0);
+        localStorage.removeItem('finboard_council_step');
+      }
+      setBoardLoading(false);
     };
-    init();
-  }, [syncTrigger]);
+    loadSession();
+  }, []);
 
   const [sessions, setSessions] = useState<FinancialSession[]>([]);
   const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null);
@@ -296,7 +283,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     init();
   }, [currentStep, selectedSessionDate, syncTrigger]); 
 
-useEffect(() => {
+  useEffect(() => {
     if (currentStep === 11) { 
       const fetchFinal = async () => {
         const data = await getFdFinalRequests();
@@ -645,10 +632,7 @@ useEffect(() => {
       try { 
           await updateRequestStatus(id, RequestStatus.DISPATCHED_TO_ACCOUNTING, user.id); 
           setFinalRequests(prev => prev.filter(r => r.id !== id)); 
-      } catch(e) {
-          console.error(e);
-          alert("შეცდომა ბუღალტერიაში გადაცემისას");
-      } 
+      } catch(e) {alert("Error")} 
   };
   
   const handleReturnToCouncil = async (id: string) => {
