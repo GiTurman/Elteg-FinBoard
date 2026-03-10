@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 // იმპორტი Supabase კლიენტის, რომელიც src/lib/supabase.ts-ში შექმენი
 import { supabase } from '../lib/supabase';
+import { submitRequest } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 
 interface RequestFormProps {
@@ -90,16 +91,19 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
     setLoading(true);
 
     try {
-      // ინფორმაციის ჩაწერა Supabase-ის expenditure_requests ცხრილში
-      const { error } = await supabase
+      // 1. ინფორმაციის ჩაწერა Supabase-ის expenditure_requests ცხრილში
+      const { error: supabaseError } = await supabase
         .from('expenditure_requests')
         .insert([
           {
+            user_id: user.id,
             user_name: user.name,
+            department: user.department,
+            manager_id: user.managerId || 'u_ceo',
             amount: totalAmount,
             description: formData.description,
             category: formData.category,
-            status: 'PENDING',
+            status: 'waiting_dept_approval', // Use the enum value string
             item_name: formData.itemName,
             quantity: formData.quantity,
             unit_price: formData.unitPrice,
@@ -111,10 +115,25 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
           }
         ]);
 
-      if (error) {
-        console.error('Supabase Insert Error:', error);
-        throw error;
+      if (supabaseError) {
+        console.error('Supabase Insert Error:', supabaseError);
+        // We don't throw here yet, we want to try the mock service too
       }
+
+      // 2. ინფორმაციის ჩაწერა ლოკალურ Mock Service-ში (რომ Dashboard-ზე გამოჩნდეს)
+      await submitRequest({
+        itemName: formData.itemName,
+        quantity: formData.quantity,
+        unitPrice: formData.unitPrice,
+        currency: formData.currency,
+        totalAmount: totalAmount,
+        category: formData.category,
+        description: formData.description,
+        revenuePotential: formData.revenuePotential,
+        priority: formData.priority,
+        alternativesChecked: formData.alternativesChecked,
+        selectedOptionReason: formData.selectedOptionReason,
+      }, user);
 
       alert('მოთხოვნა წარმატებით გაიგზავნა!');
       onSuccess();

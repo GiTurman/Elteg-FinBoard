@@ -62,7 +62,7 @@ export const Budgeting: React.FC<BudgetingProps> = ({ user, year }) => {
 
       let processedCurrentData = currentData;
       
-      // 1. სისტემური/საწყისი მონაცემები
+     // 1. სისტემური/საწყისი მონაცემები
       if (year === 2026) {
           const overrides: Record<string, number[]> = {
             'პროექტები': [1016972, 1283853, 1183968, 1318977, 1062561, 1205053, 1198042, 973303, 1328599, 1179809, 937000, 958897],
@@ -92,7 +92,6 @@ export const Budgeting: React.FC<BudgetingProps> = ({ user, year }) => {
             'დამფუძნებლის ფონდი': [8235, 8235, 22636, 15528, 12683, 22815, 10195, 8572, 14498, 8167, 8167, 8167],
             'განვითარების ფონდი': Array(12).fill(32000)
           };
-
           processedCurrentData = currentData.map((item: any) => {
               if (overrides[item.name]) {
                   const monthlyValues = overrides[item.name];

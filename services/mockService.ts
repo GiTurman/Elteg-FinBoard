@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 // FIX: Add MasterReportData to type imports
 import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, Priority, BankAccount, RevenueCategory, ExpenseFund, FundBalance, DebtRecord, CashInflowRecord, MasterReportData, ProjectRevenue, ServiceRevenue, PartRevenue, DirectiveSnapshot, Invoice, InvoiceStatus } from '../types';
 import { formatNumber } from '../utils/formatters';
+import { supabase } from '../lib/supabase';
 
 import { io } from 'socket.io-client';
 
@@ -284,6 +285,58 @@ const syncRequests = () => {
     localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
     safeEmit('update_state', { key: 'requests', value: REQUESTS });
 };
+
+export const fetchRequestsFromSupabase = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('expenditure_requests')
+      .select('*');
+    
+    if (error) {
+      console.warn('Supabase fetch error (might be missing table or RLS):', error.message);
+      return;
+    }
+    
+    if (data && data.length > 0) {
+      const mappedData: ExpenseRequest[] = data.map(item => ({
+        id: item.id?.toString() || `db_${Math.random().toString(36).substr(2, 9)}`,
+        userId: item.user_id || 'u_unknown',
+        requesterName: item.user_name || 'Unknown',
+        department: item.department || 'N/A',
+        managerId: item.manager_id || 'u_ceo',
+        date: item.date || (item.created_at ? item.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+        category: item.category || 'Other',
+        itemName: item.item_name || 'N/A',
+        quantity: item.quantity || 1,
+        unitPrice: item.unit_price || 0,
+        currency: (item.currency as Currency) || Currency.GEL,
+        totalAmount: item.amount || 0,
+        description: item.description || '',
+        revenuePotential: item.revenue_potential || '',
+        priority: (item.priority as Priority) || Priority.MEDIUM,
+        alternativesChecked: true,
+        selectedOptionReason: item.selection_reason || '',
+        status: (item.status as RequestStatus) || RequestStatus.WAITING_DEPT_APPROVAL,
+        createdAt: item.created_at || new Date().toISOString(),
+        boardDate: item.board_date || item.created_at || new Date().toISOString(),
+      }));
+
+      // Merge logic: prefer local if IDs clash, or just append new ones
+      const existingIds = new Set(REQUESTS.map(r => r.id));
+      const newItems = mappedData.filter(r => !existingIds.has(r.id));
+      
+      if (newItems.length > 0) {
+        REQUESTS = [...REQUESTS, ...newItems];
+        syncRequests();
+      }
+    }
+  } catch (err) {
+    console.error('Critical error fetching from Supabase:', err);
+  }
+};
+
+// Initial fetch
+fetchRequestsFromSupabase();
 
 let BOARD_SESSIONS: BoardSession[] = [];
 let HIDDEN_FUNDS: Record<string, boolean> = {};
