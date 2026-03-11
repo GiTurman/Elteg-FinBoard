@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { exportGenericToExcel } from '../utils/excelExport';
 import { formatNumber } from '../utils/formatters';
+import { formatShortDateTbilisi, formatDateTbilisi } from '../utils/dateUtils';
 
 interface DirectorApprovalsProps {
   user: User;
@@ -37,7 +38,7 @@ interface DirectorApprovalsProps {
 }
 
 const formatDate = (date: Date) => {
-  return date.toLocaleDateString('ka-GE', { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatShortDateTbilisi(date);
 };
 
 const StatusControl = ({ 
@@ -323,7 +324,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
       directorNote: notes[req.id]?.director || req.directorNote,
     }));
     
-    const sessionDateStr = selectedBoardDateStr ? new Date(selectedBoardDateStr).toLocaleDateString('ka-GE') : 'Active';
+    const sessionDateStr = selectedBoardDateStr ? formatDateTbilisi(new Date(selectedBoardDateStr)) : 'Active';
     const fileName = `საბჭოს_განხილვა_${sessionDateStr.replace(/\s/g, '_')}`;
 
     exportGenericToExcel(dataToExport, headers, 'Council Review', fileName);

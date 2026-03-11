@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { formatNumber } from '../utils/formatters';
+import { formatDateTbilisi } from '../utils/dateUtils';
 import { loadDispatchedDirectives, saveDispatchedDirectives, markDirectiveProcessed } from '../storage/directiveStorage';
 import { AccountantInvoicesView } from './InventoryInvoices';
 
@@ -475,7 +476,7 @@ export const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ user }
   const handleExportPayments = () => {
     if (pendingRequests.length === 0) return;
     const dataToExport = pendingRequests.map((req) => ({
-      თარიღი: new Date(req.createdAt).toLocaleDateString('ka-GE'),
+      თარიღი: formatDateTbilisi(new Date(req.createdAt)),
       მომთხოვნი: req.requesterName,
       'ხარჯის დასახელება': req.itemName || req.category,
       თანხა: req.totalAmount,

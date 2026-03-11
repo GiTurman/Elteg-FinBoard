@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getBankAccounts, getRevenueCategories, getRealTimeFundBalances, getFinancialCouncilSessions, getExpenseFunds, getAllRequests, dispatchDirectivesToAccounting, getAnnualBudget, getDispatchedDirectives, useSync } from '../services/mockService';
 import { FundBalance, User, UserRole, ExpenseRequest, DirectiveSnapshot } from '../types';
 import { formatNumber } from '../utils/formatters';
+import { formatDateTbilisi, formatTimeTbilisi } from '../utils/dateUtils';
 import { Briefcase, Download, RefreshCw, Eye, EyeOff, Search, Circle, Send, X, CheckCircle2, ArrowRightLeft } from 'lucide-react';
 import { addDirective } from '../storage/directiveStorage';
 
@@ -34,8 +35,7 @@ const CoverPageTab: React.FC = () => {
         const fetchData = async () => {
             setLoading(true);
             const today = new Date();
-            const dateOptions: Intl.DateTimeFormatOptions = { month: 'numeric', day: 'numeric', year: 'numeric' };
-            setCurrentDate(today.toLocaleDateString('en-US', dateOptions));
+            setCurrentDate(formatDateTbilisi(today));
             const sessions = await getFinancialCouncilSessions();
             if (sessions.length > 0) {
                 const activeSession = sessions.find(s => s.status === 'active') || sessions[0];
@@ -43,8 +43,7 @@ const CoverPageTab: React.FC = () => {
                 const endDate = new Date(activeSession.dateConducted);
                 const startDate = new Date(endDate);
                 startDate.setDate(endDate.getDate() - 6);
-                const rangeDateOptions: Intl.DateTimeFormatOptions = { month: 'numeric', day: 'numeric', year: 'numeric' };
-                setBoardDateRange(`${startDate.toLocaleDateString('en-US', rangeDateOptions)} - ${endDate.toLocaleDateString('en-US', rangeDateOptions)}`);
+                setBoardDateRange(`${formatDateTbilisi(startDate)} - ${formatDateTbilisi(endDate)}`);
             } else {
                 setBoardWeekLabel('საბჭოს კვირა: მონაცემები არ არის');
                 setBoardDateRange('');
@@ -72,7 +71,7 @@ const RevenueSummaryTab: React.FC<{ data: AggregatedRevenue; loading: boolean; l
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center text-xs md:text-sm text-gray-500 gap-2">
                 <p>მხოლოდ წასაკითხი რეჟიმი. ჯამებში გათვალისწინებულია მხოლოდ ის ანგარიშები, რომლებიც მიბმულია შემოსავლის კატეგორიასთან.</p>
-                {lastUpdated && (<div className="text-[10px] md:text-xs font-mono whitespace-nowrap">განახლდა: {lastUpdated.toLocaleTimeString('ka-GE')}</div>)}
+                {lastUpdated && (<div className="text-[10px] md:text-xs font-mono whitespace-nowrap">განახლდა: {formatTimeTbilisi(lastUpdated)}</div>)}
             </div>
             <div className="space-y-6">
                 {Object.keys(data).length === 0 ?
@@ -672,7 +671,7 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({
                                 const snapshotData = integratedFundData.map(f => ({ ...f }));
                                 const snapshot = {
                                     id: Date.now(),
-                                    date: new Date().toLocaleDateString('ka-GE'),
+                                    date: formatDateTbilisi(new Date()),
                                     totalRevenue: currentTotalRevenue,
                                     status: 'ARCHIVED',
                                     accountingStatus: 'pending',

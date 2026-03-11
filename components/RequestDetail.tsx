@@ -1,6 +1,7 @@
 import React from 'react';
 import { ExpenseRequest, Currency, Priority } from '../types';
 import { formatNumber } from '../utils/formatters';
+import { formatDateTbilisi } from '../utils/dateUtils';
 import { X, DollarSign, FileText, Calendar, User, Tag, TrendingUp } from 'lucide-react';
 
 interface RequestDetailProps {
@@ -31,7 +32,7 @@ export const RequestDetail: React.FC<RequestDetailProps> = ({ request, onClose }
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase">თარიღი</label>
-              <p className="font-bold">{new Date(request.date).toLocaleDateString('ka-GE')}</p>
+              <p className="font-bold">{formatDateTbilisi(new Date(request.date))}</p>
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase">სტატუსი</label>

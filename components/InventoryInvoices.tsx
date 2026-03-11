@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Invoice, InvoiceStatus, InvoiceItem, User } from '../types';
 import { getInvoicesForAccountant, getGeneratedInvoices, updateInvoice, updateInvoiceStatus, useSync } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
+import { formatDateTbilisi } from '../utils/dateUtils';
 import { CheckCircle2, ChevronDown, ChevronRight, Edit2, FileCheck, Send, Download, Save, Clock, Printer, X, Edit } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -16,8 +17,8 @@ const InvoicePrintTemplate = ({ invoice }: { invoice: Invoice }) => {
     rows.push({ id: `empty_${rows.length}`, description: '', quantity: 0, unitPrice: 0 });
   }
 
-  const formattedDate = new Date(invoice.date).toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.');
-  const formattedValidUntil = invoice.validUntil ? new Date(invoice.validUntil).toLocaleDateString('ka-GE', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '.') : '';
+  const formattedDate = formatDateTbilisi(new Date(invoice.date));
+  const formattedValidUntil = invoice.validUntil ? formatDateTbilisi(new Date(invoice.validUntil)) : '';
 
   return (
     <div className="w-full max-w-[210mm] mx-auto bg-white p-8 font-sans text-black" id="invoice-print-content">
@@ -262,7 +263,7 @@ export const AccountantInvoicesView: React.FC<{ user: User }> = ({ user }) => {
                          </span>
                        </div>
                        <div className="text-xs text-gray-500 flex items-center gap-2 mt-1">
-                         <span>თარიღი: {invoice.date}</span>
+                         <span>თარიღი: {formatDateTbilisi(new Date(invoice.date))}</span>
                          <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                          <span>ავტორი: {invoice.creatorName}</span>
                        </div>
@@ -497,7 +498,7 @@ export const GeneratedInvoicesView: React.FC<{ user: User }> = ({ user }) => {
                     <div>
                       <h3 className="font-black text-lg text-black leading-tight">{invoice.clientName}</h3>
                       <p className="text-xs text-gray-500 font-medium mt-1">ინვოისი N: {invoice.invoiceNumber}</p>
-                      <p className="text-xs text-gray-500 font-medium">თარიღი: {invoice.date}</p>
+                      <p className="text-xs text-gray-500 font-medium">თარიღი: {formatDateTbilisi(new Date(invoice.date))}</p>
                     </div>
                     {invoice.status === InvoiceStatus.COMPLETED ? (
                        <span className="text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-800 px-2 py-1 rounded flex items-center gap-1 border border-green-200">

@@ -1236,6 +1236,14 @@ export const getBoardSession = async (): Promise<BoardSession | null> => {
 
 export const openBoardSession = async (user: User): Promise<BoardSession> => {
     const now = new Date();
+    const day = now.getDay();
+    const hour = now.getHours();
+    
+    // Only allow opening on or after Wednesday 17:00
+    if (!(day > 3 || (day === 3 && hour >= 17))) {
+        throw new Error("საბჭოს გახსნა შესაძლებელია მხოლოდ ოთხშაბათს 17:00 საათის შემდეგ.");
+    }
+    
     const sessionDate = determineBoardDateForRequest(now, user.role);
     const weekDateStr = sessionDate.toISOString();
 

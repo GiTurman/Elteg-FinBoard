@@ -80,6 +80,7 @@ import {
 import { exportGenericToExcel, exportMultiSheetExcel } from '../utils/excelExport';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { formatNumber } from '../utils/formatters';
+import { formatDateTimeTbilisi, formatDateTbilisi, formatTimeTbilisi } from '../utils/dateUtils';
 
 interface FinancialCouncilProps {
   user: User;
@@ -109,12 +110,7 @@ const MONTHS = [
 
 // PROMPT 6.3-009: Timestamp formatting helper
 const formatTimestamp = (date: Date): string => {
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${day}/${month}/${year} ${hours}:${minutes}`;
+  return formatDateTimeTbilisi(date);
 };
 
 export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
@@ -712,7 +708,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                     {activeBoardSession ? (
                         <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded flex items-center gap-1 border border-green-200">
                             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                            საბჭო გახსნილია — {new Date(activeBoardSession.startTime).toLocaleDateString('ka-GE')} {new Date(activeBoardSession.startTime).toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' })}
+                            საბჭო გახსნილია — {formatDateTimeTbilisi(new Date(activeBoardSession.startTime))}
                         </span>
                     ) : (
                         <span className="text-xs font-bold bg-red-50 text-red-500 px-2 py-0.5 rounded flex items-center gap-1 border border-red-200">
@@ -722,7 +718,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                     )}
                     {selectedSessionDate && (
                         <span className="text-xs font-bold bg-gray-200 px-2 py-0.5 rounded text-gray-700 flex items-center gap-1">
-                            <Lock size={10} /> Read-Only: {new Date(selectedSessionDate).toLocaleDateString('ka-GE')}
+                            <Lock size={10} /> Read-Only: {formatDateTbilisi(new Date(selectedSessionDate))}
                         </span>
                     )}
                 </div>
