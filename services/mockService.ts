@@ -1666,6 +1666,18 @@ const handleStateUpdated = (data: any) => {
   window.dispatchEvent(new Event('finboard_sync'));
 };
 
+export const deleteRequest = async (requestId: string): Promise<void> => {
+  REQUESTS = REQUESTS.filter(r => r.id !== requestId);
+  localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
+  window.dispatchEvent(new Event('finboard_sync'));
+};
+
+export const updateRequest = async (requestId: string, updates: Partial<ExpenseRequest>): Promise<void> => {
+  REQUESTS = REQUESTS.map(r => r.id === requestId ? { ...r, ...updates } : r);
+  localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
+  window.dispatchEvent(new Event('finboard_sync'));
+};
+
 export const clearArchivedRequests = async (): Promise<void> => {
   REQUESTS = REQUESTS.filter(r => 
     r.status !== RequestStatus.PAID && 

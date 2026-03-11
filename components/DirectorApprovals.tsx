@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 // FIX: Import FundBalance from types.ts directly
 import { User, ExpenseRequest, RequestStatus, UserRole, BoardSession, ExpenseFund, Priority, FundBalance } from '../types';
+import { RequestDetail } from './RequestDetail';
 import { 
   getDirectorBoardRequests, 
   getAllRequests,
@@ -23,7 +24,8 @@ import {
   AlertTriangle,
   Info,
   Download,
-  Database
+  Database,
+  Eye
 } from 'lucide-react';
 import { exportGenericToExcel } from '../utils/excelExport';
 import { formatNumber } from '../utils/formatters';
@@ -119,6 +121,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
   const [fundBalances, setFundBalances] = useState<FundBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ExpenseRequest | null>(null);
   
   const [selectedBoardDateStr, setSelectedBoardDateStr] = useState<string>(initialSelectedDate || '');
   const [notes, setNotes] = useState<Record<string, { director?: string, fin?: string, discussion?: string }>>({});
@@ -332,6 +335,9 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
 
   return (
     <div className="space-y-8 font-sans relative">
+      {selectedRequest && (
+        <RequestDetail request={selectedRequest} onClose={() => setSelectedRequest(null)} />
+      )}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-gray-200 pb-4">
          <div className="flex items-center gap-2">
             <History size={20} className="text-gray-500"/>
@@ -498,6 +504,9 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
                         <span className="text-xs text-gray-400 animate-pulse">მუშავდება...</span>
                       ) : (
                         <div className="flex items-center justify-center gap-2">
+                           <button onClick={() => setSelectedRequest(req)} className="text-gray-600 hover:text-black">
+                             <Eye size={14} />
+                           </button>
                            <button
                              onClick={() => handleReturnToManager(req.id)}
                              className="flex items-center gap-1.5 px-3 py-2 bg-yellow-500 text-white text-xs font-bold uppercase rounded hover:bg-yellow-600 transition-colors shadow-md"

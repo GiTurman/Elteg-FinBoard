@@ -5,6 +5,7 @@ import { User, ExpenseRequest, RequestStatus, UserRole } from '../types';
 import { getRequestsForUser, getArchivedRequestsForUser, updateRequestStatus, resubmitRequest, useSync } from '../services/mockService';
 import { exportToExcel } from '../utils/excelExport';
 import { formatNumber } from '../utils/formatters';
+import { RequestDetail } from './RequestDetail';
 import { 
   Clock, 
   CheckCircle, 
@@ -24,7 +25,8 @@ import {
   GitPullRequestArrow,
   Calendar,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Eye
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -101,6 +103,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'active' | 'archive'>('active');
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>({});
+  const [selectedRequest, setSelectedRequest] = useState<ExpenseRequest | null>(null);
   const syncTrigger = useSync();
 
   const fetchRequests = async () => {
@@ -204,6 +207,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       </div>
 
       {/* Correction Section */}
+      {selectedRequest && (
+        <RequestDetail request={selectedRequest} onClose={() => setSelectedRequest(null)} />
+      )}
       {pendingForCorrection.length > 0 && (
         <section className="bg-red-50 border-2 border-red-200 p-6 rounded-lg animate-in slide-in-from-top-4">
           <h3 className="text-red-800 font-black uppercase text-sm mb-4 flex items-center gap-2">
@@ -310,6 +316,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                </div>
                <div className="flex items-center gap-4">
                   <StatusBadge status={req.status} />
+                  <button onClick={() => setSelectedRequest(req)} className="p-1.5 hover:bg-gray-200 rounded transition-colors" title="დეტალები">
+                    <Eye size={16} />
+                  </button>
                   <div className="font-bold text-sm min-w-[120px] text-right font-mono">{formatNumber(req.totalAmount)} {req.currency}</div>
                </div>
             </div>
@@ -351,6 +360,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                               </div>
                               <div className="flex items-center gap-4">
                                 <StatusBadge status={req.status} />
+                                <button onClick={() => setSelectedRequest(req)} className="p-1.5 hover:bg-gray-200 rounded transition-colors" title="დეტალები">
+                                  <Eye size={16} />
+                                </button>
                                 <div className="font-bold text-sm min-w-[120px] text-right font-mono">{formatNumber(req.totalAmount)} {req.currency}</div>
                               </div>
                             </div>

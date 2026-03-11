@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, ExpenseRequest, RequestStatus } from '../types';
-import { getAllRequests, useSync, clearArchivedRequests } from '../services/mockService';
+import { User, ExpenseRequest, RequestStatus, UserRole } from '../types';
+import { getAllRequests, useSync, clearArchivedRequests, deleteRequest, updateRequest } from '../services/mockService';
+import { RequestDetail } from './RequestDetail';
 import { 
   Archive, 
   Calendar, 
@@ -11,7 +12,10 @@ import {
   XCircle, 
   ChevronDown, 
   ChevronRight,
-  CornerUpLeft // Added for returned status
+  CornerUpLeft,
+  Trash2,
+  Edit,
+  Eye
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { formatNumber } from '../utils/formatters';
@@ -23,6 +27,7 @@ interface GlobalArchiveProps {
 export const GlobalArchive: React.FC<GlobalArchiveProps> = ({ user }) => {
   const [requests, setRequests] = useState<ExpenseRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRequest, setSelectedRequest] = useState<ExpenseRequest | null>(null);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,6 +114,9 @@ export const GlobalArchive: React.FC<GlobalArchiveProps> = ({ user }) => {
 
   return (
     <div className="space-y-8 font-sans text-black">
+      {selectedRequest && (
+        <RequestDetail request={selectedRequest} onClose={() => setSelectedRequest(null)} />
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-2 border-black pb-6">
         <div className="flex items-center gap-4">
@@ -239,6 +247,16 @@ export const GlobalArchive: React.FC<GlobalArchiveProps> = ({ user }) => {
                                      {req.status}
                                   </span>
                                 )}
+                                <div className="flex gap-2 justify-center mt-2">
+                                  <button onClick={() => setSelectedRequest(req)} className="text-gray-600 hover:text-black">
+                                    <Eye size={14} />
+                                  </button>
+                                  {user.role === UserRole.FOUNDER && (
+                                    <button onClick={() => { if(confirm('ნამდვილად გსურთ წაშლა?')) deleteRequest(req.id); }} className="text-red-600 hover:text-red-800">
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))}
