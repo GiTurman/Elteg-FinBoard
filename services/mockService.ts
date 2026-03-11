@@ -5,138 +5,30 @@ import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, 
 import { formatNumber } from '../utils/formatters';
 import { supabase } from '../lib/supabase';
 
-const channel = supabase.channel('finboard_sync_channel');
+let channel: any = null;
 
-channel
-  .on('broadcast', { event: 'update_state' }, ({ payload }) => {
-    handleStateUpdated(payload);
-  })
-  .on('broadcast', { event: 'request_state' }, () => {
-    // Another client is requesting state, let's send our current state
-    channel.send({
-      type: 'broadcast',
-      event: 'init_state',
-      payload: {
-        users: USERS,
-        requests: REQUESTS,
-        invoices: INVOICES,
-        cwInflow: CURRENT_WEEK_CASH_INFLOW,
-        archivedInflow: ARCHIVED_CASH_INFLOW,
-        debtors: DEBTORS,
-        creditors: CREDITORS,
-        projects: MOCK_PROJECTS,
-        services: MOCK_SERVICES,
-        parts: MOCK_PARTS,
-        boardSessions: BOARD_SESSIONS,
-        hiddenFunds: HIDDEN_FUNDS,
-        dispatchedDirectives: DISPATCHED_DIRECTIVES,
-        bankAccounts: BANK_ACCOUNTS,
-        revenueCategories: REVENUE_CATEGORIES,
-        annualBudgets: ANNUAL_BUDGETS,
-        currentYearActuals: CURRENT_YEAR_ACTUALS,
-        budgetAnalysisComments: BUDGET_ANALYSIS_COMMENTS,
-        mockRates: MOCK_RATES,
-        mockInflation: MOCK_INFLATION_RATE
-      }
-    }).catch(err => console.warn('Supabase broadcast error:', err));
-  })
-  .on('broadcast', { event: 'init_state' }, ({ payload }) => {
-    handleInitState(payload);
-  })
-  .subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      console.log('Supabase Realtime connected successfully');
-      // Request initial state from other clients
-      channel.send({
-        type: 'broadcast',
-        event: 'request_state',
-        payload: {}
-      }).catch(err => console.warn('Supabase broadcast error:', err));
-    } else if (status === 'CHANNEL_ERROR') {
-      console.error('Supabase Realtime connection error');
-    }
-  });
+// --- GLOBAL STATE VARIABLES ---
+export let USERS: Record<string, User> = {};
+export let REQUESTS: ExpenseRequest[] = [];
+export let BOARD_SESSIONS: BoardSession[] = [];
+export let HIDDEN_FUNDS: Record<string, boolean> = {};
+export let DISPATCHED_DIRECTIVES: DirectiveSnapshot[] = [];
+export let INVOICES: Invoice[] = [];
+export let CURRENT_WEEK_CASH_INFLOW: CashInflowRecord[] = [];
+export let ARCHIVED_CASH_INFLOW: Record<string, CashInflowRecord[]> = {};
+export let DEBTORS: DebtRecord[] = [];
+export let CREDITORS: DebtRecord[] = [];
+export let BANK_ACCOUNTS: BankAccount[] = [];
+export let REVENUE_CATEGORIES: RevenueCategory[] = [];
+export let MOCK_RATES = { USD: 2.70, EUR: 2.90 };
+export let MOCK_INFLATION_RATE = 3.2;
+export let ANNUAL_BUDGETS: Record<number, Record<string, number>> = {};
+export let CURRENT_YEAR_ACTUALS: Record<string, number[]> = {};
+export let BUDGET_ANALYSIS_COMMENTS: Record<string, string> = {};
+export let MOCK_PROJECTS: ProjectRevenue[] = [];
+export let MOCK_SERVICES: ServiceRevenue[] = [];
+export let MOCK_PARTS: PartRevenue[] = [];
 
-const handleInitState = (state: any) => {
-  let hasData = false;
-  if (state.users && Object.keys(state.users).length > 0) {
-    for (const key in USERS) delete USERS[key];
-    Object.assign(USERS, state.users);
-    hasData = true;
-  }
-  
-  if (state.requests && state.requests.length > 0) { REQUESTS = state.requests; localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS)); hasData = true; }
-  if (state.invoices && state.invoices.length > 0) { INVOICES = state.invoices; localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES)); hasData = true; }
-  if (state.cwInflow && state.cwInflow.length > 0) { CURRENT_WEEK_CASH_INFLOW = state.cwInflow; localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW)); hasData = true; }
-  if (state.archivedInflow && state.archivedInflow.length > 0) { ARCHIVED_CASH_INFLOW = state.archivedInflow; localStorage.setItem('finboard_archived_inflow', JSON.stringify(ARCHIVED_CASH_INFLOW)); hasData = true; }
-  if (state.debtors && state.debtors.length > 0) { DEBTORS = state.debtors; localStorage.setItem('finboard_debtors', JSON.stringify(DEBTORS)); hasData = true; }
-  if (state.creditors && state.creditors.length > 0) { CREDITORS = state.creditors; localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS)); hasData = true; }
-  if (state.projects && state.projects.length > 0) { MOCK_PROJECTS = state.projects; localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS)); hasData = true; }
-  if (state.services && state.services.length > 0) { MOCK_SERVICES = state.services; localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES)); hasData = true; }
-  if (state.parts && state.parts.length > 0) { MOCK_PARTS = state.parts; localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS)); hasData = true; }
-  if (state.boardSessions && state.boardSessions.length > 0) { BOARD_SESSIONS = state.boardSessions; localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS)); hasData = true; }
-  if (state.hiddenFunds && Object.keys(state.hiddenFunds).length > 0) { HIDDEN_FUNDS = state.hiddenFunds; localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS)); hasData = true; }
-  if (state.dispatchedDirectives && state.dispatchedDirectives.length > 0) { DISPATCHED_DIRECTIVES = state.dispatchedDirectives; localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES)); hasData = true; }
-  if (state.bankAccounts && state.bankAccounts.length > 0) { BANK_ACCOUNTS = state.bankAccounts; localStorage.setItem('finboard_bank_accounts', JSON.stringify(BANK_ACCOUNTS)); hasData = true; }
-  if (state.revenueCategories && state.revenueCategories.length > 0) { REVENUE_CATEGORIES = state.revenueCategories; localStorage.setItem('finboard_revenue_categories', JSON.stringify(REVENUE_CATEGORIES)); hasData = true; }
-  if (state.annualBudgets && state.annualBudgets.length > 0) { ANNUAL_BUDGETS = state.annualBudgets; localStorage.setItem('finboard_annual_budgets', JSON.stringify(ANNUAL_BUDGETS)); hasData = true; }
-  if (state.currentYearActuals && state.currentYearActuals.length > 0) { CURRENT_YEAR_ACTUALS = state.currentYearActuals; localStorage.setItem('finboard_current_year_actuals', JSON.stringify(CURRENT_YEAR_ACTUALS)); hasData = true; }
-  if (state.budgetAnalysisComments && Object.keys(state.budgetAnalysisComments).length > 0) { BUDGET_ANALYSIS_COMMENTS = state.budgetAnalysisComments; localStorage.setItem('finboard_budget_comments', JSON.stringify(BUDGET_ANALYSIS_COMMENTS)); hasData = true; }
-  if (state.mockRates && Object.keys(state.mockRates).length > 0) { MOCK_RATES = state.mockRates; localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES)); hasData = true; }
-  if (state.mockInflation && Object.keys(state.mockInflation).length > 0) { MOCK_INFLATION_RATE = state.mockInflation; localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE)); hasData = true; }
-
-  if (hasData) {
-    window.dispatchEvent(new Event('finboard_sync'));
-  }
-};
-
-const handleStateUpdated = (data: any) => {
-  const { key, action, id, changes, value } = data;
-
-  const applyUpdate = (stateRef: any) => {
-    if (action === 'update_item' && Array.isArray(stateRef)) {
-      const index = stateRef.findIndex((item: any) => item.id === id);
-      if (index !== -1) {
-        const updated = [...stateRef];
-        updated[index] = { ...updated[index], ...changes };
-        return updated;
-      }
-    } else if (action === 'add_item' && Array.isArray(stateRef)) {
-      return [...stateRef, value];
-    } else if (action === 'delete_item' && Array.isArray(stateRef)) {
-      return stateRef.filter((item: any) => item.id !== id);
-    }
-    // Full replacement fallback
-    return value;
-  };
-
-  if (key === 'users') {
-    for (const k in USERS) delete USERS[k];
-    Object.assign(USERS, value);
-    localStorage.setItem('finboard_users', JSON.stringify(USERS));
-  }
-  if (key === 'requests') { REQUESTS = applyUpdate(REQUESTS); localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS)); }
-  if (key === 'invoices') { INVOICES = applyUpdate(INVOICES); localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES)); }
-  if (key === 'cwInflow') { CURRENT_WEEK_CASH_INFLOW = applyUpdate(CURRENT_WEEK_CASH_INFLOW); localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW)); }
-  if (key === 'archivedInflow') { ARCHIVED_CASH_INFLOW = applyUpdate(ARCHIVED_CASH_INFLOW); localStorage.setItem('finboard_archived_inflow', JSON.stringify(ARCHIVED_CASH_INFLOW)); }
-  if (key === 'debtors') { DEBTORS = applyUpdate(DEBTORS); localStorage.setItem('finboard_debtors', JSON.stringify(DEBTORS)); }
-  if (key === 'creditors') { CREDITORS = applyUpdate(CREDITORS); localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS)); }
-  if (key === 'projects') { MOCK_PROJECTS = applyUpdate(MOCK_PROJECTS); localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS)); }
-  if (key === 'services') { MOCK_SERVICES = applyUpdate(MOCK_SERVICES); localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES)); }
-  if (key === 'parts') { MOCK_PARTS = applyUpdate(MOCK_PARTS); localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS)); }
-  if (key === 'boardSessions') { BOARD_SESSIONS = applyUpdate(BOARD_SESSIONS); localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS)); }
-  if (key === 'hiddenFunds') { HIDDEN_FUNDS = applyUpdate(HIDDEN_FUNDS); localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS)); }
-  if (key === 'dispatchedDirectives') { DISPATCHED_DIRECTIVES = applyUpdate(DISPATCHED_DIRECTIVES); localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES)); }
-  if (key === 'bankAccounts') { BANK_ACCOUNTS = applyUpdate(BANK_ACCOUNTS); localStorage.setItem('finboard_bank_accounts', JSON.stringify(BANK_ACCOUNTS)); }
-  if (key === 'revenueCategories') { REVENUE_CATEGORIES = applyUpdate(REVENUE_CATEGORIES); localStorage.setItem('finboard_revenue_categories', JSON.stringify(REVENUE_CATEGORIES)); }
-  if (key === 'annualBudgets') { ANNUAL_BUDGETS = applyUpdate(ANNUAL_BUDGETS); localStorage.setItem('finboard_annual_budgets', JSON.stringify(ANNUAL_BUDGETS)); }
-  if (key === 'currentYearActuals') { CURRENT_YEAR_ACTUALS = applyUpdate(CURRENT_YEAR_ACTUALS); localStorage.setItem('finboard_current_year_actuals', JSON.stringify(CURRENT_YEAR_ACTUALS)); }
-  if (key === 'budgetAnalysisComments') { BUDGET_ANALYSIS_COMMENTS = applyUpdate(BUDGET_ANALYSIS_COMMENTS); localStorage.setItem('finboard_budget_comments', JSON.stringify(BUDGET_ANALYSIS_COMMENTS)); }
-  if (key === 'mockRates') { MOCK_RATES = applyUpdate(MOCK_RATES); localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES)); }
-  if (key === 'mockInflation') { MOCK_INFLATION_RATE = applyUpdate(MOCK_INFLATION_RATE); localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE)); }
-
-  window.dispatchEvent(new Event('finboard_sync'));
-};
 
 import { useState, useEffect } from 'react';
 
@@ -151,7 +43,7 @@ export const useSync = () => {
 };
 
 // Mock Users Structure
-export const USERS: Record<string, User> = {
+USERS = {
   // --- TOP LEVEL ---
   'u_founder': { 
     id: 'u_founder', 
@@ -266,25 +158,90 @@ try {
 }
 
 // --- PERSISTENCE LOGIC (LocalStorage) ---
-let REQUESTS: ExpenseRequest[] = [];
+REQUESTS = [];
 try {
     const storedReqs = localStorage.getItem('finboard_requests');
     if (storedReqs) REQUESTS = JSON.parse(storedReqs);
 } catch(e) {}
-const safeEmit = (event: string, data: any) => {
-  if (event === 'update_state') {
+function safeEmit(event: string, data: any) {
+  if (channel && event === 'update_state') {
     channel.send({
       type: 'broadcast',
       event: 'update_state',
       payload: data
-    }).catch(err => console.warn('Supabase broadcast error:', err));
+    }).catch((err: any) => console.warn('Supabase broadcast error:', err));
   }
-};
+}
 
 const syncRequests = () => {
     localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
     safeEmit('update_state', { key: 'requests', value: REQUESTS });
 };
+
+export const resetDatabase = async () => {
+  // Clear local arrays
+  REQUESTS = [];
+  BOARD_SESSIONS = [];
+  DISPATCHED_DIRECTIVES = [];
+  CURRENT_WEEK_CASH_INFLOW = [];
+  ARCHIVED_CASH_INFLOW = {};
+  MOCK_PROJECTS = [];
+  MOCK_SERVICES = [];
+  MOCK_PARTS = [];
+  INVOICES = [];
+  CURRENT_YEAR_ACTUALS = {};
+  DEBTORS = [];
+  CREDITORS = [];
+
+  // Clear local storage
+  const keysToClear = [
+    'finboard_requests',
+    'finboard_board_sessions',
+    'finboard_directives',
+    'finboard_cw_inflow',
+    'finboard_archived_inflow',
+    'finboard_projects',
+    'finboard_services',
+    'finboard_parts',
+    'finboard_invoices',
+    'finboard_current_year_actuals',
+    'finboard_debtors',
+    'finboard_creditors'
+  ];
+  keysToClear.forEach(key => localStorage.removeItem(key));
+
+  // Broadcast empty states to other clients
+  safeEmit('update_state', { key: 'requests', value: REQUESTS });
+  safeEmit('update_state', { key: 'boardSessions', value: BOARD_SESSIONS });
+  safeEmit('update_state', { key: 'dispatchedDirectives', value: DISPATCHED_DIRECTIVES });
+  safeEmit('update_state', { key: 'cwInflow', value: CURRENT_WEEK_CASH_INFLOW });
+  safeEmit('update_state', { key: 'archivedInflow', value: ARCHIVED_CASH_INFLOW });
+  safeEmit('update_state', { key: 'projects', value: MOCK_PROJECTS });
+  safeEmit('update_state', { key: 'services', value: MOCK_SERVICES });
+  safeEmit('update_state', { key: 'parts', value: MOCK_PARTS });
+  safeEmit('update_state', { key: 'invoices', value: INVOICES });
+  safeEmit('update_state', { key: 'currentYearActuals', value: CURRENT_YEAR_ACTUALS });
+  safeEmit('update_state', { key: 'debtors', value: DEBTORS });
+  safeEmit('update_state', { key: 'creditors', value: CREDITORS });
+
+  // Try to clear Supabase requests table as well
+  try {
+    await supabase.from('expenditure_requests').delete().neq('id', '0');
+  } catch (err) {
+    console.warn('Could not clear Supabase table:', err);
+  }
+
+  window.dispatchEvent(new Event('finboard_sync'));
+};
+
+// TEMPORARY RESET
+const RESET_VERSION = 'v3';
+if (localStorage.getItem('finboard_reset_version') !== RESET_VERSION) {
+  resetDatabase().then(() => {
+    localStorage.setItem('finboard_reset_version', RESET_VERSION);
+    console.log('Database reset to empty arrays successfully.');
+  });
+}
 
 export const fetchRequestsFromSupabase = async () => {
   try {
@@ -338,9 +295,9 @@ export const fetchRequestsFromSupabase = async () => {
 // Initial fetch
 fetchRequestsFromSupabase();
 
-let BOARD_SESSIONS: BoardSession[] = [];
-let HIDDEN_FUNDS: Record<string, boolean> = {};
-let DISPATCHED_DIRECTIVES: DirectiveSnapshot[] = [];
+BOARD_SESSIONS = [];
+HIDDEN_FUNDS = {};
+DISPATCHED_DIRECTIVES = [];
 
 // === BOARD SESSION SYNC ===
 const syncBoardSessions = () => {
@@ -360,7 +317,7 @@ try {
 } catch(e) {}
 
 // NEW: Invoice Storage (Persisted)
-let INVOICES: Invoice[] = [];
+INVOICES = [];
 try {
     const storedInv = localStorage.getItem('finboard_invoices');
     if (storedInv) INVOICES = JSON.parse(storedInv);
@@ -368,6 +325,11 @@ try {
 const syncInvoices = () => {
     localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES));
     safeEmit('update_state', { key: 'invoices', value: INVOICES });
+};
+
+const syncDirectives = () => {
+    localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES));
+    safeEmit('update_state', { key: 'dispatchedDirectives', value: DISPATCHED_DIRECTIVES });
 };
 
 
@@ -431,8 +393,8 @@ const generateArchivedData = (): Record<string, CashInflowRecord[]> => {
     return data;
 };
 
-let CURRENT_WEEK_CASH_INFLOW: CashInflowRecord[] = generateCashInflowRecords(50);
-let ARCHIVED_CASH_INFLOW: Record<string, CashInflowRecord[]> = generateArchivedData();
+CURRENT_WEEK_CASH_INFLOW = generateCashInflowRecords(50);
+ARCHIVED_CASH_INFLOW = generateArchivedData();
 
 try {
     const storedCW = localStorage.getItem('finboard_cw_inflow');
@@ -449,8 +411,8 @@ const syncCashInflow = () => {
 };
 
 // --- DEBT/CREDIT DATA (Persisted) ---
-let DEBTORS: DebtRecord[] = Array.from({ length: 10 }, (_, i) => ({ id: `debtor_${i + 1}`, name: `კლიენტი A${i + 1}`, previousBalance: 12000, increase: 500, decrease: 200, currentBalance: 12300, comment: 'Initial' }));
-let CREDITORS: DebtRecord[] = Array.from({ length: 10 }, (_, i) => ({ id: `creditor_${i + 1}`, name: `მომწოდებელი B${i + 1}`, previousBalance: 8000, increase: 1000, decrease: 400, currentBalance: 8600, comment: 'Initial' }));
+DEBTORS = Array.from({ length: 10 }, (_, i) => ({ id: `debtor_${i + 1}`, name: `კლიენტი A${i + 1}`, previousBalance: 12000, increase: 500, decrease: 200, currentBalance: 12300, comment: 'Initial' }));
+CREDITORS = Array.from({ length: 10 }, (_, i) => ({ id: `creditor_${i + 1}`, name: `მომწოდებელი B${i + 1}`, previousBalance: 8000, increase: 1000, decrease: 400, currentBalance: 8600, comment: 'Initial' }));
 
 try {
     const sDebtors = localStorage.getItem('finboard_debtors');
@@ -467,14 +429,14 @@ const syncDebts = () => {
 }
 
 // --- BANKING DATA ---
-let BANK_ACCOUNTS: BankAccount[] = [
+BANK_ACCOUNTS = [
   { id: 'ba_1', accountName: 'Main Operational', bankName: 'TBC Bank', iban: 'GE00TB110000000000001', currency: Currency.GEL, currentBalance: 45000, lastSync: new Date().toISOString(), mappedCategoryId: 'rev_service', isAutoSync: true },
   { id: 'ba_2', accountName: 'USD Reserve', bankName: 'Bank of Georgia', iban: 'GE00BG220000000000002', currency: Currency.USD, currentBalance: 12500, lastSync: new Date().toISOString(), mappedCategoryId: 'rev_projects', isAutoSync: true },
   { id: 'ba_3', accountName: 'Unmapped Incoming', bankName: 'Liberty Bank', iban: 'GE00LB330000000000003', currency: Currency.GEL, currentBalance: 5600, lastSync: new Date().toISOString(), isAutoSync: true },
   { id: 'ba_4', accountName: 'Petty Cash', bankName: 'Salaro', iban: 'CASH', currency: Currency.GEL, currentBalance: 1200, lastSync: new Date().toISOString(), isAutoSync: false }
 ];
 
-let REVENUE_CATEGORIES: RevenueCategory[] = [
+REVENUE_CATEGORIES = [
   { id: 'rev_projects', name: 'პროექტები', description: 'ახალი ლიფტების მონტაჟი', plannedAmount: 50000, actualAmount: 52500 },
   { id: 'rev_service', name: 'სერვისი', description: 'ყოველთვიური მომსახურება', plannedAmount: 30000, actualAmount: 29800 },
   { id: 'rev_parts', name: 'ნაწილები', description: 'სათადარიგო ნაწილების რეალიზაცია', plannedAmount: 15000, actualAmount: 17300 },
@@ -490,7 +452,7 @@ try {
 } catch(e) {}
 
 // --- CURRENCY RATES (PROMPT 6.2-009) ---
-let MOCK_RATES = { USD: 2.70, EUR: 2.90 };
+MOCK_RATES = { USD: 2.70, EUR: 2.90 };
 try {
     const sMockRates = localStorage.getItem('finboard_mock_rates');
     if (sMockRates) MOCK_RATES = JSON.parse(sMockRates);
@@ -504,7 +466,7 @@ export const updateCurrencyRates = async (newRates: { USD: number; EUR: number }
 };
 
 // PROMPT 6.3-015: Inflation Rate
-let MOCK_INFLATION_RATE = 3.2;
+MOCK_INFLATION_RATE = 3.2;
 try {
     const sMockInflation = localStorage.getItem('finboard_mock_inflation');
     if (sMockInflation) MOCK_INFLATION_RATE = JSON.parse(sMockInflation);
@@ -551,7 +513,7 @@ export const EXPENSE_FUNDS: ExpenseFund[] = [
 ];
 
 // --- BUDGETING DATA ---
-let ANNUAL_BUDGETS: Record<number, Record<string, number>> = {
+ANNUAL_BUDGETS = {
   2025: {},
   2026: {
     // Revenues
@@ -596,17 +558,17 @@ let budgetOverrideData: any[] | null = null;
 export const clearBudgetOverride = async () => { budgetOverrideData = null; };
 
 // PROMPT 6.2-008: State for dynamic budget actuals
-let CURRENT_YEAR_ACTUALS: Record<string, number[]> = {};
+CURRENT_YEAR_ACTUALS = {};
 export const clearBudgetActuals = async () => { CURRENT_YEAR_ACTUALS = {}; };
 
 // PROMPT 7.3-008: State for analysis comments
-let BUDGET_ANALYSIS_COMMENTS: Record<string, string> = {};
+BUDGET_ANALYSIS_COMMENTS = {};
 export const getBudgetAnalysisComments = async (): Promise<Record<string, string>> => ({ ...BUDGET_ANALYSIS_COMMENTS });
 export const updateBudgetAnalysisComment = async (fundId: string, comment: string): Promise<void> => { BUDGET_ANALYSIS_COMMENTS[fundId] = comment; };
 
 
 // PROMPT 6.7-002: Project Revenue Data (Persisted)
-let MOCK_PROJECTS: ProjectRevenue[] = [
+MOCK_PROJECTS = [
   {
     id: 'proj_1', clientName: 'm2', contractDate: '2026-02-15T12:00:00.000Z', durationInWeeks: 26, contractNumber: 'C-001',
     productType: 'ლიფტი', brand: 'Schindler', product: 'Model 5500', unit: 'ცალი', numberOfFloors: 16, quantity: 2, value: 150000,
@@ -685,7 +647,7 @@ export const terminateProject = async (projectId: string, terminationDate: strin
 
 
 // PROMPT 6.8-001: Service Revenue Data (Persisted)
-let MOCK_SERVICES: ServiceRevenue[] = [
+MOCK_SERVICES = [
   {
     id: 'serv_1', clientName: 'Axis', contractDate: '2026-03-10T12:00:00.000Z', durationInWeeks: 52, contractNumber: 'S-SERV-01',
     productType: 'მომსახურება', brand: 'Generic', product: 'Full Service Package', unit: 'თვე', quantity: 12, value: 24000,
@@ -738,7 +700,7 @@ export const terminateService = async (serviceId: string, terminationDate: strin
 };
 
 // PROMPT 6.8-002: Parts Revenue Data (Persisted)
-let MOCK_PARTS: PartRevenue[] = [
+MOCK_PARTS = [
   {
     id: 'part_1', clientName: 'Redco', contractDate: '2026-02-01T12:00:00.000Z', durationInWeeks: 2, contractNumber: 'P-001-RD',
     productType: 'ნაწილი', brand: 'Otis', product: 'Drive Unit GEN2', unit: 'ცალი', quantity: 1, value: 15000,
@@ -2155,9 +2117,12 @@ export const dispatchDirectivesToAccounting = async (user: User, directives: any
     dispatchedByName: user.name,
     dispatchedAt: new Date().toISOString(),
     directivesData: directives.map(d => ({
-      fundName: d.name,
+      fundName: d.name || d.fundName,
       category: d.category,
-      approvedAmount: d.approved,
+      approvedAmount: d.approved || d.approvedAmount,
+      availableAmount: d.available || d.availableAmount,
+      distributionPercentage: d.distributionPercentage,
+      calculatedAmount: d.calculated || d.calculatedAmount
     })),
     status: 'pending',
   };
@@ -2168,10 +2133,11 @@ export const dispatchDirectivesToAccounting = async (user: User, directives: any
   } else {
     DISPATCHED_DIRECTIVES.unshift(snapshot);
   }
+  syncDirectives();
 };
 
 export const getDispatchedDirectives = async (): Promise<DirectiveSnapshot[]> => {
-  const senderRoles = [UserRole.FOUNDER, UserRole.CEO];
+  const senderRoles = [UserRole.FOUNDER, UserRole.CEO, UserRole.FIN_DIRECTOR];
   return DISPATCHED_DIRECTIVES.filter(d => {
     const sender = Object.values(USERS).find(u => u.id === d.dispatchedByUserId);
     return sender && senderRoles.includes(sender.role);
@@ -2187,6 +2153,7 @@ export const updateDirectiveStatus = async (directiveId: string, newStatus: 'pro
       processedAt: new Date().toISOString(),
       processedByUserId: userId,
     };
+    syncDirectives();
   }
 };
 
@@ -2265,3 +2232,154 @@ export const resetAllDataToProduction = async () => {
   localStorage.clear();
   // Since we reload the page, in-memory variables will reset automatically.
 };
+
+// === SUPABASE REALTIME SYNC SETUP ===
+const handleInitState = (state: any) => {
+  let hasData = false;
+  if (state.users && Object.keys(state.users).length > 0) {
+    for (const key in USERS) delete USERS[key];
+    Object.assign(USERS, state.users);
+    hasData = true;
+  }
+  
+  if (state.requests && state.requests.length > 0) { REQUESTS = state.requests; localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS)); hasData = true; }
+  if (state.invoices && state.invoices.length > 0) { INVOICES = state.invoices; localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES)); hasData = true; }
+  if (state.cwInflow && state.cwInflow.length > 0) { CURRENT_WEEK_CASH_INFLOW = state.cwInflow; localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW)); hasData = true; }
+  if (state.archivedInflow && state.archivedInflow.length > 0) { ARCHIVED_CASH_INFLOW = state.archivedInflow; localStorage.setItem('finboard_archived_inflow', JSON.stringify(ARCHIVED_CASH_INFLOW)); hasData = true; }
+  if (state.debtors && state.debtors.length > 0) { DEBTORS = state.debtors; localStorage.setItem('finboard_debtors', JSON.stringify(DEBTORS)); hasData = true; }
+  if (state.creditors && state.creditors.length > 0) { CREDITORS = state.creditors; localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS)); hasData = true; }
+  if (state.projects && state.projects.length > 0) { MOCK_PROJECTS = state.projects; localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS)); hasData = true; }
+  if (state.services && state.services.length > 0) { MOCK_SERVICES = state.services; localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES)); hasData = true; }
+  if (state.parts && state.parts.length > 0) { MOCK_PARTS = state.parts; localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS)); hasData = true; }
+  if (state.boardSessions && state.boardSessions.length > 0) { BOARD_SESSIONS = state.boardSessions; localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS)); hasData = true; }
+  if (state.hiddenFunds && Object.keys(state.hiddenFunds).length > 0) { HIDDEN_FUNDS = state.hiddenFunds; localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS)); hasData = true; }
+  if (state.dispatchedDirectives && state.dispatchedDirectives.length > 0) { DISPATCHED_DIRECTIVES = state.dispatchedDirectives; localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES)); hasData = true; }
+  if (state.bankAccounts && state.bankAccounts.length > 0) { BANK_ACCOUNTS = state.bankAccounts; localStorage.setItem('finboard_bank_accounts', JSON.stringify(BANK_ACCOUNTS)); hasData = true; }
+  if (state.revenueCategories && state.revenueCategories.length > 0) { REVENUE_CATEGORIES = state.revenueCategories; localStorage.setItem('finboard_revenue_categories', JSON.stringify(REVENUE_CATEGORIES)); hasData = true; }
+  if (state.annualBudgets && state.annualBudgets.length > 0) { ANNUAL_BUDGETS = state.annualBudgets; localStorage.setItem('finboard_annual_budgets', JSON.stringify(ANNUAL_BUDGETS)); hasData = true; }
+  if (state.currentYearActuals && state.currentYearActuals.length > 0) { CURRENT_YEAR_ACTUALS = state.currentYearActuals; localStorage.setItem('finboard_current_year_actuals', JSON.stringify(CURRENT_YEAR_ACTUALS)); hasData = true; }
+  if (state.budgetAnalysisComments && Object.keys(state.budgetAnalysisComments).length > 0) { BUDGET_ANALYSIS_COMMENTS = state.budgetAnalysisComments; localStorage.setItem('finboard_budget_comments', JSON.stringify(BUDGET_ANALYSIS_COMMENTS)); hasData = true; }
+  if (state.mockRates && Object.keys(state.mockRates).length > 0) { MOCK_RATES = state.mockRates; localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES)); hasData = true; }
+  if (state.mockInflation && Object.keys(state.mockInflation).length > 0) { MOCK_INFLATION_RATE = state.mockInflation; localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE)); hasData = true; }
+
+  window.dispatchEvent(new Event('finboard_sync'));
+};
+
+const handleStateUpdated = (data: any) => {
+  const { key, action, id, changes, value } = data;
+
+  const applyUpdate = (stateRef: any) => {
+    if (action === 'update_item' && Array.isArray(stateRef)) {
+      const index = stateRef.findIndex((item: any) => item.id === id);
+      if (index !== -1) {
+        const updated = [...stateRef];
+        updated[index] = { ...updated[index], ...changes };
+        return updated;
+      }
+    } else if (action === 'add_item' && Array.isArray(stateRef)) {
+      return [...stateRef, value];
+    } else if (action === 'delete_item' && Array.isArray(stateRef)) {
+      return stateRef.filter((item: any) => item.id !== id);
+    }
+    // Full replacement fallback
+    return value;
+  };
+
+  if (key === 'users') {
+    for (const k in USERS) delete USERS[k];
+    Object.assign(USERS, value);
+    localStorage.setItem('finboard_users', JSON.stringify(USERS));
+  }
+  if (key === 'requests') { REQUESTS = applyUpdate(REQUESTS); localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS)); }
+  if (key === 'invoices') { INVOICES = applyUpdate(INVOICES); localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES)); }
+  if (key === 'cwInflow') { CURRENT_WEEK_CASH_INFLOW = applyUpdate(CURRENT_WEEK_CASH_INFLOW); localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW)); }
+  if (key === 'archivedInflow') { ARCHIVED_CASH_INFLOW = applyUpdate(ARCHIVED_CASH_INFLOW); localStorage.setItem('finboard_archived_inflow', JSON.stringify(ARCHIVED_CASH_INFLOW)); }
+  if (key === 'debtors') { DEBTORS = applyUpdate(DEBTORS); localStorage.setItem('finboard_debtors', JSON.stringify(DEBTORS)); }
+  if (key === 'creditors') { CREDITORS = applyUpdate(CREDITORS); localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS)); }
+  if (key === 'projects') { MOCK_PROJECTS = applyUpdate(MOCK_PROJECTS); localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS)); }
+  if (key === 'services') { MOCK_SERVICES = applyUpdate(MOCK_SERVICES); localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES)); }
+  if (key === 'parts') { MOCK_PARTS = applyUpdate(MOCK_PARTS); localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS)); }
+  if (key === 'boardSessions') { BOARD_SESSIONS = applyUpdate(BOARD_SESSIONS); localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS)); }
+  if (key === 'hiddenFunds') { HIDDEN_FUNDS = applyUpdate(HIDDEN_FUNDS); localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS)); }
+  if (key === 'dispatchedDirectives') { DISPATCHED_DIRECTIVES = applyUpdate(DISPATCHED_DIRECTIVES); localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES)); }
+  if (key === 'bankAccounts') { BANK_ACCOUNTS = applyUpdate(BANK_ACCOUNTS); localStorage.setItem('finboard_bank_accounts', JSON.stringify(BANK_ACCOUNTS)); }
+  if (key === 'revenueCategories') { REVENUE_CATEGORIES = applyUpdate(REVENUE_CATEGORIES); localStorage.setItem('finboard_revenue_categories', JSON.stringify(REVENUE_CATEGORIES)); }
+  if (key === 'annualBudgets') { ANNUAL_BUDGETS = applyUpdate(ANNUAL_BUDGETS); localStorage.setItem('finboard_annual_budgets', JSON.stringify(ANNUAL_BUDGETS)); }
+  if (key === 'currentYearActuals') { CURRENT_YEAR_ACTUALS = applyUpdate(CURRENT_YEAR_ACTUALS); localStorage.setItem('finboard_current_year_actuals', JSON.stringify(CURRENT_YEAR_ACTUALS)); }
+  if (key === 'budgetAnalysisComments') { BUDGET_ANALYSIS_COMMENTS = applyUpdate(BUDGET_ANALYSIS_COMMENTS); localStorage.setItem('finboard_budget_comments', JSON.stringify(BUDGET_ANALYSIS_COMMENTS)); }
+  if (key === 'mockRates') { MOCK_RATES = applyUpdate(MOCK_RATES); localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES)); }
+  if (key === 'mockInflation') { MOCK_INFLATION_RATE = applyUpdate(MOCK_INFLATION_RATE); localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE)); }
+
+  window.dispatchEvent(new Event('finboard_sync'));
+};
+
+const initSupabaseSync = () => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  
+  if (!url || !key || url.includes('your-project') || key.includes('your-anon-key')) {
+    console.warn('Supabase Realtime skipped: Invalid or placeholder credentials.');
+    return;
+  }
+
+  if (!url.startsWith('https://')) {
+    console.error('Supabase Realtime error: VITE_SUPABASE_URL must start with https://');
+    return;
+  }
+
+  channel = supabase.channel('finboard_sync_channel');
+
+  channel
+    .on('broadcast', { event: 'update_state' }, ({ payload }: any) => {
+      handleStateUpdated(payload);
+    })
+    .on('broadcast', { event: 'request_state' }, () => {
+      // Another client is requesting state, let's send our current state
+      channel.send({
+        type: 'broadcast',
+        event: 'init_state',
+        payload: {
+          users: USERS,
+          requests: REQUESTS,
+          invoices: INVOICES,
+          cwInflow: CURRENT_WEEK_CASH_INFLOW,
+          archivedInflow: ARCHIVED_CASH_INFLOW,
+          debtors: DEBTORS,
+          creditors: CREDITORS,
+          projects: MOCK_PROJECTS,
+          services: MOCK_SERVICES,
+          parts: MOCK_PARTS,
+          boardSessions: BOARD_SESSIONS,
+          hiddenFunds: HIDDEN_FUNDS,
+          dispatchedDirectives: DISPATCHED_DIRECTIVES,
+          bankAccounts: BANK_ACCOUNTS,
+          revenueCategories: REVENUE_CATEGORIES,
+          annualBudgets: ANNUAL_BUDGETS,
+          currentYearActuals: CURRENT_YEAR_ACTUALS,
+          budgetAnalysisComments: BUDGET_ANALYSIS_COMMENTS,
+          mockRates: MOCK_RATES,
+          mockInflation: MOCK_INFLATION_RATE
+        }
+      }).catch((err: any) => console.warn('Supabase broadcast error:', err));
+    })
+    .on('broadcast', { event: 'init_state' }, ({ payload }: any) => {
+      handleInitState(payload);
+    })
+    .subscribe((status: string, err?: any) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('Supabase Realtime connected successfully');
+        // Request initial state from other clients
+        channel.send({
+          type: 'broadcast',
+          event: 'request_state',
+          payload: {}
+        }).catch((err: any) => console.warn('Supabase broadcast error:', err));
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('Supabase Realtime connection error:', err || 'Unknown error. Please verify your credentials and ensure Realtime is enabled in your Supabase project dashboard.');
+      } else if (status === 'TIMED_OUT') {
+        console.error('Supabase Realtime connection timed out.');
+      }
+    });
+};
+
+initSupabaseSync();

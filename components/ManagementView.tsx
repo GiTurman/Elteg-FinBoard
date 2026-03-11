@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { getBankAccounts, getRevenueCategories, getRealTimeFundBalances, getFinancialCouncilSessions, getExpenseFunds, getAllRequests, dispatchDirectivesToAccounting, getAnnualBudget, useSync } from '../services/mockService';
+import { getBankAccounts, getRevenueCategories, getRealTimeFundBalances, getFinancialCouncilSessions, getExpenseFunds, getAllRequests, dispatchDirectivesToAccounting, getAnnualBudget, getDispatchedDirectives, useSync } from '../services/mockService';
 import { FundBalance, User, UserRole, ExpenseRequest, DirectiveSnapshot } from '../types';
 import { formatNumber } from '../utils/formatters';
 import { Briefcase, Download, RefreshCw, Eye, EyeOff, Search, Circle, Send, X, CheckCircle2, ArrowRightLeft } from 'lucide-react';
@@ -336,24 +336,44 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
     // [ENHANCEMENT: READ-ONLY VIEW & ACCOUNTING STATUS]
     const [viewingRecord, setViewingRecord] = useState<any | null>(null);
     const [accountingStatuses, setAccountingStatuses] = useState<Record<string, boolean>>({});
+    const syncTrigger = useSync();
 
     useEffect(() => {
-        try {
-            const saved = localStorage.getItem('mgmt_archive_history');
-            if (saved) {
-                const history = JSON.parse(saved);
-                setArchiveHistory(history);
-                
-                // Sync accounting status from localStorage (mock)
-                const statuses: Record<string, boolean> = {};
-                history.forEach((log: any) => {
-                    const isDone = localStorage.getItem(`accounting_task_complete_${log.id}`);
-                    if (isDone === 'true') statuses[log.id] = true;
-                });
-                setAccountingStatuses(statuses);
+        const syncData = async () => {
+            try {
+                const saved = localStorage.getItem('mgmt_archive_history');
+                if (saved) {
+                    const history = JSON.parse(saved);
+                    setArchiveHistory(history);
+                    
+                    // Sync accounting status from multiple sources
+                    const statuses: Record<string, boolean> = {};
+                    
+                    // 1. Check legacy individual keys
+                    history.forEach((log: any) => {
+                        const isDone = localStorage.getItem(`accounting_task_complete_${log.id}`);
+                        if (isDone === 'true') statuses[log.id] = true;
+                    });
+
+                    // 2. Check Dispatched Directives from Service (Real-time sync)
+                    const dispatched = await getDispatchedDirectives();
+                    dispatched.forEach(d => {
+                        if (d.status === 'processed') {
+                            // Extract original ID if it was a bridge directive
+                            const originalId = d.id.startsWith('dir_') ? d.id.substring(4) : d.id;
+                            statuses[originalId] = true;
+                        }
+                    });
+
+                    setAccountingStatuses(statuses);
+                }
+            } catch (e) {
+                console.error("Error syncing management data:", e);
             }
-        } catch (e) {}
-    }, []);
+        };
+
+        syncData();
+    }, [syncTrigger]);
 
     const summaryData = useMemo(() => {
         const totalRevenue = sessions.reduce((sum, s) => sum + s.totalRevenue, 0);

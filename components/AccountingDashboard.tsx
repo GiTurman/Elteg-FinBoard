@@ -234,17 +234,23 @@ export const AccountantDirectivesView: React.FC<{ user: User }> = ({ user }) => 
                     <table className="w-full text-sm whitespace-nowrap">
                     <thead className="bg-gray-50 print:bg-white print:border-b-2 print:border-black">
                         <tr className="border-b">
-                        <th className="px-4 py-2 font-bold text-left">Fund Name</th>
-                        <th className="px-4 py-2 font-bold text-left">Category</th>
-                        <th className="px-4 py-2 font-bold text-right">Approved Amount (₾)</th>
+                        <th className="px-4 py-2 font-bold text-left">ფონდი</th>
+                        <th className="px-4 py-2 font-bold text-left">კატეგორია</th>
+                        <th className="px-4 py-2 font-bold text-right">ხელმისაწვდომი (₾)</th>
+                        <th className="px-4 py-2 font-bold text-right">განაწილება %</th>
+                        <th className="px-4 py-2 font-bold text-right">გათვლილი (₾)</th>
+                        <th className="px-4 py-2 font-bold text-right text-blue-600">დამტკიცებული (₾)</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 print:divide-black">
                         {directive.directivesData.map((item, index) => (
                         <tr key={index}>
-                            <td className="px-4 py-2 font-medium">{item.fundName}</td>
-                            <td className="px-4 py-2">{item.category}</td>
-                            <td className="px-4 py-2 text-right font-mono font-bold">{formatNumber(item.approvedAmount)}</td>
+                            <td className="px-4 py-2 font-bold">{item.fundName}</td>
+                            <td className="px-4 py-2 text-gray-500">{item.category}</td>
+                            <td className="px-4 py-2 text-right font-mono text-gray-400">{formatNumber(item.availableAmount || 0)}</td>
+                            <td className="px-4 py-2 text-right font-mono text-gray-400">{item.distributionPercentage ? `${item.distributionPercentage.toFixed(2)}%` : '-'}</td>
+                            <td className="px-4 py-2 text-right font-mono text-gray-400">{formatNumber(item.calculatedAmount || 0)}</td>
+                            <td className="px-4 py-2 text-right font-mono font-bold text-blue-600 bg-blue-50/30">{formatNumber(item.approvedAmount)}</td>
                         </tr>
                         ))}
                     </tbody>
@@ -268,18 +274,21 @@ export const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ user }
   const [requests, setRequests] = useState<ExpenseRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'pending' | 'archive' | 'invoices'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'archive' | 'invoices' | 'directives'>('pending');
   const [invoicesCount, setInvoicesCount] = useState(0);
+  const [directivesCount, setDirectivesCount] = useState(0);
   const syncTrigger = useSync();
 
   const fetchRequests = async () => {
     // Uses DISPATCHED_TO_ACCOUNTING filter + PAID and fetches pending invoices count
-    const [data, invoices] = await Promise.all([
+    const [data, invoices, directives] = await Promise.all([
       getAccountingRequests(),
-      getInvoicesForAccountant()
+      getInvoicesForAccountant(),
+      getDispatchedDirectives()
     ]);
     setRequests(data);
     setInvoicesCount(invoices.length);
+    setDirectivesCount(directives.filter(d => d.status === 'pending').length);
     setLoading(false);
   };
 
@@ -360,6 +369,15 @@ export const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ user }
               className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all border border-transparent ${activeTab === 'pending' ? 'bg-black text-white shadow-sm' : 'text-gray-500 hover:text-black'}`}
             >
               მიმდინარე ({pendingRequests.length})
+            </button>
+            <button 
+              onClick={() => setActiveTab('directives')}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all border border-transparent ${activeTab === 'directives' ? 'bg-black text-white shadow-sm' : 'text-gray-500 hover:text-black'}`}
+            >
+              დირექტივები
+              {directivesCount > 0 && (
+                <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">{directivesCount}</span>
+              )}
             </button>
             <button 
               onClick={() => setActiveTab('invoices')}
@@ -446,6 +464,12 @@ export const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ user }
       {activeTab === 'invoices' && (
         <div className="mt-4 animate-in fade-in">
           <AccountantInvoicesView user={user} />
+        </div>
+      )}
+
+      {activeTab === 'directives' && (
+        <div className="mt-4 animate-in fade-in">
+          <AccountantDirectivesView user={user} />
         </div>
       )}
       

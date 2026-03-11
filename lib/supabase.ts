@@ -13,13 +13,28 @@ export const supabase = new Proxy({} as SupabaseClient, {
       const url = import.meta.env.VITE_SUPABASE_URL;
       const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      if (!url || !key) {
-        throw new Error(
-          'Supabase configuration is missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the app settings.'
-        );
+      const isPlaceholder = !url || !key || url.includes('your-project') || key.includes('your-anon-key');
+
+      if (isPlaceholder) {
+        // If it's a placeholder, we return a dummy function for any method call
+        // to prevent the app from crashing, but we log a warning.
+        return (...args: any[]) => {
+          console.warn(`Supabase method "${String(prop)}" called but Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.`);
+          return {
+            on: () => ({ on: () => ({ subscribe: () => ({}) }) }),
+            subscribe: () => ({}),
+            channel: () => ({ on: () => ({ on: () => ({ subscribe: () => ({}) }) }) }),
+          };
+        };
       }
+      
       _supabase = createClient(url, key);
     }
-    return Reflect.get(_supabase, prop, receiver);
+    
+    const value = Reflect.get(_supabase, prop, receiver);
+    if (typeof value === 'function') {
+      return value.bind(_supabase);
+    }
+    return value;
   },
 });

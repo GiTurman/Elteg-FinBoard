@@ -303,6 +303,9 @@ export interface DispatchedDirectiveItem {
   fundName: string;
   category: string;
   approvedAmount: number;
+  availableAmount?: number;
+  distributionPercentage?: number;
+  calculatedAmount?: number;
 }
 
 export interface DirectiveSnapshot {

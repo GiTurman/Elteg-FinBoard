@@ -52,6 +52,8 @@ const calculateDeadlineInfo = () => {
     };
 };
 
+import { NumpadInput } from './NumpadInput';
+
 export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [deadlineInfo, setDeadlineInfo] = useState(calculateDeadlineInfo());
@@ -252,26 +254,21 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
 
               <div className="lg:col-span-3">
                 <label className="block text-sm font-bold text-black mb-2">რაოდენობა</label>
-                <input 
-                  type="number" 
-                  min="1"
-                  required
+                <NumpadInput 
+                  min={1}
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
                   value={formData.quantity}
-                  onChange={(e) => handleChange('quantity', parseInt(e.target.value) || 0)}
+                  onChange={(val) => handleChange('quantity', val)}
                 />
               </div>
 
               <div className="lg:col-span-3">
                 <label className="block text-sm font-bold text-black mb-2">ერთ. ფასი</label>
-                <input 
-                  type="number" 
-                  min="0"
-                  step="0.01"
-                  required
+                <NumpadInput 
+                  min={0}
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
                   value={formData.unitPrice || ''}
-                  onChange={(e) => handleChange('unitPrice', parseFloat(e.target.value) || 0)}
+                  onChange={(val) => handleChange('unitPrice', val)}
                 />
               </div>
 
