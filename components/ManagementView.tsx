@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { getBankAccounts, getRevenueCategories, getRealTimeFundBalances, getFinancialCouncilSessions, getExpenseFunds, getAllRequests, dispatchDirectivesToAccounting, getAnnualBudget, getDispatchedDirectives, useSync } from '../services/mockService';
 import { FundBalance, User, UserRole, ExpenseRequest, DirectiveSnapshot } from '../types';
@@ -16,10 +15,10 @@ interface IntegratedFundData {
   category: 'Direct' | 'Marginal' | 'Adjustable' | 'Special';
   available: number;
   calculated: number;
-  approved: number; 
+  approved: number;
   carryOver: number;
   expense: number;
-  returnedUnspent: number; 
+  returnedUnspent: number;
   distributionPercentage: number;
 }
 
@@ -76,8 +75,8 @@ const RevenueSummaryTab: React.FC<{ data: AggregatedRevenue; loading: boolean; l
                 {lastUpdated && (<div className="text-[10px] md:text-xs font-mono whitespace-nowrap">განახლდა: {lastUpdated.toLocaleTimeString('ka-GE')}</div>)}
             </div>
             <div className="space-y-6">
-                {Object.keys(data).length === 0 ? 
-                    <div className="p-8 text-center text-gray-500 border-2 border-dashed rounded-lg">აგრეგირებული მონაცემები არ მოიძებნა.</div> : 
+                {Object.keys(data).length === 0 ?
+                    <div className="p-8 text-center text-gray-500 border-2 border-dashed rounded-lg">აგრეგირებული მონაცემები არ მოიძებნა.</div> :
                     Object.entries(data).map(([categoryName, banks]) => (
                         <div key={categoryName} className="p-4 md:p-6 bg-gray-50 border-2 border-gray-100 rounded-lg">
                             <h4 className="font-bold text-gray-800 mb-3 text-base md:text-lg border-b pb-2">{categoryName}</h4>
@@ -112,23 +111,23 @@ const FundsTab: React.FC<{ data: IntegratedFundData[], hiddenFunds: Record<strin
         Adjustable: visibleData.filter(f => f.category === 'Adjustable').map(f => ({ ...f, incomeFromDistribution: f.approved })),
         Special: visibleData.filter(f => f.category === 'Special').map(f => ({ ...f, incomeFromDistribution: f.approved })),
     };
-    
-    const calculateTotals = (funds: any[]) => funds.reduce((acc, fund) => { 
-        acc.carryOver += fund.carryOver; 
-        acc.incomeFromDistribution += fund.incomeFromDistribution; 
-        acc.afterDistribution += (fund.carryOver + fund.incomeFromDistribution); 
-        acc.expense += fund.expense; 
-        acc.remainingAfterExpense += (fund.carryOver + fund.incomeFromDistribution - fund.expense); 
-        acc.returnedUnspent += fund.returnedUnspent; 
-        acc.finalAmount += (fund.carryOver + fund.incomeFromDistribution - fund.expense + fund.returnedUnspent); 
-        return acc; 
+
+    const calculateTotals = (funds: any[]) => funds.reduce((acc, fund) => {
+        acc.carryOver += fund.carryOver;
+        acc.incomeFromDistribution += fund.incomeFromDistribution;
+        acc.afterDistribution += (fund.carryOver + fund.incomeFromDistribution);
+        acc.expense += fund.expense;
+        acc.remainingAfterExpense += (fund.carryOver + fund.incomeFromDistribution - fund.expense);
+        acc.returnedUnspent += fund.returnedUnspent;
+        acc.finalAmount += (fund.carryOver + fund.incomeFromDistribution - fund.expense + fund.returnedUnspent);
+        return acc;
     }, { carryOver: 0, incomeFromDistribution: 0, afterDistribution: 0, expense: 0, remainingAfterExpense: 0, returnedUnspent: 0, finalAmount: 0 });
-    
+
     const grandTotals = calculateTotals(Object.values(fundsByCat).flat());
-    
+
     const renderFundRow = (fund: any, isTotal = false) => {
-        const afterDistribution = fund.carryOver + fund.incomeFromDistribution; 
-        const remainingAfterExpense = afterDistribution - fund.expense; 
+        const afterDistribution = fund.carryOver + fund.incomeFromDistribution;
+        const remainingAfterExpense = afterDistribution - fund.expense;
         const finalAmount = remainingAfterExpense + fund.returnedUnspent;
         return (
             <tr key={isTotal ? 'total' : fund.id} className={isTotal ? "bg-gray-800 text-white font-bold" : "hover:bg-gray-50"}>
@@ -176,7 +175,7 @@ const FundsTab: React.FC<{ data: IntegratedFundData[], hiddenFunds: Record<strin
                         </tbody>
                         <tfoot className="sticky bottom-0">
                             <tr className="bg-gray-800">
-                                <td colSpan={9} className="px-3 py-2 font-extrabold text-white text-xs md:text-sm tracking-wider sticky left-0">SECTION C: TOTALS (SUM)</td>
+                                <td colSpan={9} className="px-3 py-2 font-extrabold text-white text-xs md:text-sm tracking-wider sticky left-0">TOTALS (SUM)</td>
                             </tr>
                             {renderFundRow({ name: 'სულ ჯამი', ...grandTotals }, true)}
                         </tfoot>
@@ -187,7 +186,26 @@ const FundsTab: React.FC<{ data: IntegratedFundData[], hiddenFunds: Record<strin
     );
 };
 
-const DirectivesTab: React.FC<{ data: IntegratedFundData[], revenue: any, margin: any, onUpdate: (id: string, value: number) => void, user: User, hiddenFunds: Record<string, boolean>, toggleFundVisibility: (id: string) => void, toggleSectionVisibility: (cat: string) => void, isLocked: boolean }> = ({ data, revenue, margin, onUpdate, user, hiddenFunds, toggleFundVisibility, toggleSectionVisibility, isLocked }) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// DirectivesTab — KEY LOGIC:
+//   • Section A (Direct) fields are always manual (ხელით).
+//   • When any Section A value changes, we recalculate the remaining budget
+//     (totalRevenue - sum of all Direct approved values) and redistribute it
+//     proportionally among non-Direct funds using their distributionPercentage.
+//   • Section C (Adjustable) still shows the auto-calculated share but can also
+//     be overridden manually like all other sections.
+// ─────────────────────────────────────────────────────────────────────────────
+const DirectivesTab: React.FC<{
+    data: IntegratedFundData[];
+    revenue: any;
+    margin: any;
+    onUpdate: (id: string, value: number) => void;
+    user: User;
+    hiddenFunds: Record<string, boolean>;
+    toggleFundVisibility: (id: string) => void;
+    toggleSectionVisibility: (cat: string) => void;
+    isLocked: boolean;
+}> = ({ data, revenue, margin, onUpdate, user, hiddenFunds, toggleFundVisibility, toggleSectionVisibility, isLocked }) => {
     const isTopLevel = [UserRole.FOUNDER, UserRole.CEO, UserRole.FIN_DIRECTOR].includes(user.role);
 
     if (!data || data.length === 0) return <div className="p-12 text-center text-gray-500">მონაცემები მზადდება...</div>;
@@ -198,59 +216,113 @@ const DirectivesTab: React.FC<{ data: IntegratedFundData[], revenue: any, margin
         Adjustable: data.filter(d => d.category === 'Adjustable'),
         Special: data.filter(d => d.category === 'Special'),
     };
-    
+
+    // ── Totals ──────────────────────────────────────────────────────────────
+    const totalDirectApproved = fundsByCat.Direct.reduce((sum, d) => sum + d.approved, 0);
+    // Remaining after Section A direct costs are subtracted from total revenue
+    const remainingAfterDirect = revenue.total - totalDirectApproved;
+
+    // Total % of non-Direct funds (used for proportional redistribution)
+    const nonDirectTotalPct = data
+        .filter(d => d.category !== 'Direct')
+        .reduce((sum, d) => sum + d.distributionPercentage, 0);
+
+    // For display totals row
     const totalCalculated = data.reduce((sum, d) => sum + d.calculated, 0);
     const totalApproved = data.reduce((sum, d) => sum + d.approved, 0);
     const remainingBalance = revenue.total - totalApproved;
 
-    const renderSection = (title: string, funds: IntegratedFundData[], category: 'Direct' | 'Marginal' | 'Adjustable' | 'Special', bgColor: string) => {
-      const isSectionHidden = funds.every(f => hiddenFunds[f.id]);
-      return (
-        <React.Fragment key={category}>
-            <tr className={bgColor}>
-                <td colSpan={5} className="p-2 font-bold text-xs md:text-sm">
-                    <div className="flex items-center gap-2">
-                        {isTopLevel && <button onClick={() => toggleSectionVisibility(category)}>{isSectionHidden ? <EyeOff size={14}/> : <Eye size={14}/>}</button>}
-                        {title}
-                    </div>
-                </td>
-            </tr>
-            {funds.filter(f => !hiddenFunds[f.id]).map(fund => {
-              const approvedExceeds = fund.approved > fund.available;
-              const calculatedAmount = fund.calculated;
-              const currentPct = revenue.total > 0 ? (fund.approved / revenue.total) * 100 : 0;
+    // ── Section renderer ─────────────────────────────────────────────────────
+    const renderSection = (
+        title: string,
+        funds: IntegratedFundData[],
+        category: 'Direct' | 'Marginal' | 'Adjustable' | 'Special',
+        bgColor: string
+    ) => {
+        const isDirect = category === 'Direct';
+        const isSectionHidden = funds.every(f => hiddenFunds[f.id]);
 
-              return (
-                <tr key={fund.id} className="border-b">
-                  <td className="p-2 font-bold flex items-center gap-2 min-w-[150px]">
-                    {isTopLevel && <button onClick={() => toggleFundVisibility(fund.id)}>{hiddenFunds[fund.id] ? <EyeOff size={14} className="text-gray-400"/> : <Eye size={14}/>}</button>}
-                    <span className="text-[10px] md:text-xs">{fund.name}</span>
-                  </td>
-                  <td className="p-2 text-right font-mono text-[10px] md:text-xs">{formatNumber(fund.available)}</td>
-                  <td className={`p-2 text-center font-mono font-bold text-[10px] md:text-xs ${fund.category === 'Adjustable' ? 'bg-gray-100' : 'text-gray-600'}`}>
-                      {currentPct.toFixed(2)}%
-                  </td>
-                  <td className="p-2 text-right font-mono text-gray-500 text-[10px] md:text-xs">{formatNumber(calculatedAmount)}</td>
-                  <td className="p-1 min-w-[100px]">
-                      <input 
-                        type="number" 
-                        value={Math.round(fund.approved)} 
-                        onChange={(e) => onUpdate(fund.id, parseFloat(e.target.value))} 
-                        disabled={isLocked}
-                        className={`w-full text-right font-mono font-bold text-xs md:text-sm p-2 rounded bg-yellow-50 border ${approvedExceeds ? 'border-red-500 text-red-600' : 'border-yellow-300'} outline-none focus:ring-1 focus:ring-black disabled:bg-gray-100 disabled:text-gray-500 disabled:border-gray-200`}
-                      />
-                  </td>
+        return (
+            <React.Fragment key={category}>
+                <tr className={bgColor}>
+                    <td colSpan={5} className="p-2 font-bold text-xs md:text-sm">
+                        <div className="flex items-center gap-2">
+                            {isTopLevel && (
+                                <button onClick={() => toggleSectionVisibility(category)}>
+                                    {isSectionHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                                </button>
+                            )}
+                            {title}
+                            {isDirect && (
+                                <span className="ml-2 text-[10px] font-normal bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">
+                                    ხელით → ნაშთი ნაწილდება სხვა ფონდებზე
+                                </span>
+                            )}
+                        </div>
+                    </td>
                 </tr>
-              );
-            })}
-        </React.Fragment>
-      );
+                {funds.filter(f => !hiddenFunds[f.id]).map(fund => {
+                    const approvedExceeds = fund.approved > fund.available;
+                    const currentPct = revenue.total > 0 ? (fund.approved / revenue.total) * 100 : 0;
+
+                    // For non-Direct funds: recalculate their approved proportionally from remaining budget
+                    // This is the "display calculated" value — actual approved may differ if user overrode
+                    const proportionalCalculated = isDirect
+                        ? fund.calculated
+                        : nonDirectTotalPct > 0
+                            ? (fund.distributionPercentage / nonDirectTotalPct) * remainingAfterDirect
+                            : 0;
+
+                    return (
+                        <tr key={fund.id} className="border-b">
+                            <td className="p-2 font-bold flex items-center gap-2 min-w-[150px]">
+                                {isTopLevel && (
+                                    <button onClick={() => toggleFundVisibility(fund.id)}>
+                                        {hiddenFunds[fund.id] ? <EyeOff size={14} className="text-gray-400" /> : <Eye size={14} />}
+                                    </button>
+                                )}
+                                <span className="text-[10px] md:text-xs">{fund.name}</span>
+                            </td>
+                            <td className="p-2 text-right font-mono text-[10px] md:text-xs">{formatNumber(fund.available)}</td>
+                            <td className={`p-2 text-center font-mono font-bold text-[10px] md:text-xs ${fund.category === 'Adjustable' ? 'bg-gray-100' : 'text-gray-600'}`}>
+                                {currentPct.toFixed(2)}%
+                            </td>
+                            <td className="p-2 text-right font-mono text-gray-500 text-[10px] md:text-xs">
+                                {formatNumber(Math.round(proportionalCalculated))}
+                                {!isDirect && (
+                                    <span className="ml-1 text-[9px] text-blue-500" title="ნაშთიდან პროპორციულად">↺</span>
+                                )}
+                            </td>
+                            <td className="p-1 min-w-[100px]">
+                                <input
+                                    type="number"
+                                    value={Math.round(fund.approved)}
+                                    onChange={(e) => onUpdate(fund.id, parseFloat(e.target.value) || 0)}
+                                    disabled={isLocked}
+                                    className={`w-full text-right font-mono font-bold text-xs md:text-sm p-2 rounded border outline-none focus:ring-1 focus:ring-black disabled:bg-gray-100 disabled:text-gray-500 disabled:border-gray-200 ${
+                                        approvedExceeds
+                                            ? 'border-red-500 text-red-600 bg-red-50'
+                                            : isDirect
+                                                ? 'bg-blue-50 border-blue-300'
+                                                : 'bg-yellow-50 border-yellow-300'
+                                    }`}
+                                />
+                            </td>
+                        </tr>
+                    );
+                })}
+            </React.Fragment>
+        );
     };
 
     return (
         <div className="space-y-8">
-            <div><h2 className="text-xl md:text-2xl font-bold">დირექტივა (Step 3)</h2><p className="text-xs md:text-sm text-gray-500">ფონდების განაწილების საბოლოო დამტკიცება.</p></div>
-            
+            <div>
+                <h2 className="text-xl md:text-2xl font-bold">დირექტივა (Step 3)</h2>
+                <p className="text-xs md:text-sm text-gray-500">ფონდების განაწილების საბოლოო დამტკიცება.</p>
+            </div>
+
+            {/* ── BLOCK A: Revenue ─────────────────────────────────────────────────── */}
             <div className="bg-gray-50 p-4 md:p-6 border border-gray-200 rounded-lg">
                 <h3 className="font-bold text-base md:text-lg mb-4 border-b pb-2">BLOCK A: შემოსავალი</h3>
                 <div className="space-y-2 text-xs md:text-sm">
@@ -262,6 +334,22 @@ const DirectivesTab: React.FC<{ data: IntegratedFundData[], revenue: any, margin
                 </div>
             </div>
 
+            {/* ── Distribution logic info banner ───────────────────────────────────── */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 flex flex-col md:flex-row md:items-center gap-2">
+                <div className="font-bold shrink-0">📌 განაწილების ლოგიკა:</div>
+                <div>
+                    <span className="font-mono font-bold">{formatNumber(revenue.total)}</span> (სულ შემოსავალი)
+                    {' − '}
+                    <span className="font-mono font-bold text-blue-700">{formatNumber(totalDirectApproved)}</span> (Section A პირდაპირი ხარჯები)
+                    {' = '}
+                    <span className={`font-mono font-bold ${remainingAfterDirect < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                        {formatNumber(remainingAfterDirect)}
+                    </span>
+                    {' → ნაწილდება დარჩენილ ფონდებზე განაწილების % ების შესაბამისად'}
+                </div>
+            </div>
+
+            {/* ── BLOCK B: Fund distribution table ─────────────────────────────────── */}
             <div className="bg-white p-4 md:p-6 border border-gray-200 rounded-lg">
                 <h3 className="font-bold text-base md:text-lg mb-4 border-b pb-2">BLOCK B: ფონდების განაწილება</h3>
                 <div className="overflow-x-auto -mx-2 md:mx-0" style={{ maxHeight: '60vh' }}>
@@ -277,22 +365,26 @@ const DirectivesTab: React.FC<{ data: IntegratedFundData[], revenue: any, margin
                                 </tr>
                             </thead>
                             <tbody>
-                                {renderSection('SECTION A: პირდაპირი ხარჯის ფონდები (MANUAL)', fundsByCat.Direct, 'Direct', 'bg-blue-50 text-blue-800')}
-                                {renderSection('SECTION B: მარჟინალური ხარჯების ფონდები (MANUAL)', fundsByCat.Marginal, 'Marginal', 'bg-purple-50 text-purple-800')}
-                                {renderSection('SECTION C: კორექტირებადი ხარჯების ფონდები (AUTOMATIC)', fundsByCat.Adjustable, 'Adjustable', 'bg-green-50 text-green-800')}
-                                {renderSection('SECTION D: განსაკუთრებული ფონდები (MANUAL)', fundsByCat.Special, 'Special', 'bg-red-50 text-red-800')}
+                                {renderSection('SECTION A: პირდაპირი ხარჯის ფონდები (ხელით)', fundsByCat.Direct, 'Direct', 'bg-blue-50 text-blue-800')}
+                                {renderSection('SECTION B: მარჟინალური ხარჯების ფონდები', fundsByCat.Marginal, 'Marginal', 'bg-purple-50 text-purple-800')}
+                                {renderSection('SECTION C: კორექტირებადი ხარჯების ფონდები (ავტომატური)', fundsByCat.Adjustable, 'Adjustable', 'bg-green-50 text-green-800')}
+                                {renderSection('SECTION D: განსაკუთრებული ფონდები', fundsByCat.Special, 'Special', 'bg-red-50 text-red-800')}
                             </tbody>
                             <tfoot>
                                 <tr className="bg-gray-800 text-white font-bold text-[10px] md:text-xs">
                                     <td className="p-2">სულ:</td>
                                     <td className="p-2 text-right font-mono">-</td>
-                                    <td className="p-2 text-center font-mono">{data.reduce((s,d)=>d.category === 'Adjustable' ? s + d.distributionPercentage : s, 0).toFixed(2)}%</td>
+                                    <td className="p-2 text-center font-mono">
+                                        {data.reduce((s, d) => d.category === 'Adjustable' ? s + d.distributionPercentage : s, 0).toFixed(2)}%
+                                    </td>
                                     <td className="p-2 text-right font-mono">{formatNumber(totalCalculated)}</td>
                                     <td className="p-2 text-right font-mono">{formatNumber(totalApproved)}</td>
                                 </tr>
                                 <tr>
                                     <td colSpan={4} className="p-2 text-right font-bold text-sm md:text-lg">ნაშთი განაწილებისთვის:</td>
-                                    <td className={`p-2 text-right font-mono font-extrabold text-sm md:text-lg ${remainingBalance < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatNumber(remainingBalance)}</td>
+                                    <td className={`p-2 text-right font-mono font-extrabold text-sm md:text-lg ${remainingBalance < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                        {formatNumber(remainingBalance)}
+                                    </td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -300,6 +392,7 @@ const DirectivesTab: React.FC<{ data: IntegratedFundData[], revenue: any, margin
                 </div>
             </div>
 
+            {/* ── BLOCK C: Margin ───────────────────────────────────────────────────── */}
             <div className="bg-gray-50 p-4 md:p-6 border border-gray-200 rounded-lg">
                 <h3 className="font-bold text-base md:text-lg mb-4 border-b pb-2">BLOCK C: მარჟა & კორექტირება</h3>
                 <div className="space-y-2 text-xs md:text-sm">
@@ -314,26 +407,28 @@ const DirectivesTab: React.FC<{ data: IntegratedFundData[], revenue: any, margin
 };
 
 interface FullOverviewTabProps {
-  allRequests: ExpenseRequest[];
-  sessions: any[]; 
-  expenseFunds: any[];
-  fundRules: any[];
-  fundBalances: FundBalance[];
-  loading: boolean;
-  user: User;
-  integratedFundData: IntegratedFundData[];
-  onStartNewWeek: () => void;
-  isPeriodLocked: boolean;
-  onDispatchLiveDirective: () => void;
-  currentTotalRevenue: number;
+    allRequests: ExpenseRequest[];
+    sessions: any[];
+    expenseFunds: any[];
+    fundRules: any[];
+    fundBalances: FundBalance[];
+    loading: boolean;
+    user: User;
+    integratedFundData: IntegratedFundData[];
+    onStartNewWeek: () => void;
+    isPeriodLocked: boolean;
+    onDispatchLiveDirective: () => void;
+    currentTotalRevenue: number;
 }
 
-const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions, expenseFunds, fundRules, fundBalances, loading, user, integratedFundData, onStartNewWeek, isPeriodLocked, onDispatchLiveDirective, currentTotalRevenue }) => {
+const FullOverviewTab: React.FC<FullOverviewTabProps> = ({
+    allRequests, sessions, expenseFunds, fundRules, fundBalances,
+    loading, user, integratedFundData, onStartNewWeek, isPeriodLocked,
+    onDispatchLiveDirective, currentTotalRevenue
+}) => {
     const isAuthorized = user.role === 'FIN_DIRECTOR' || user.role === 'FOUNDER';
     const [searchQuery, setSearchQuery] = useState('');
     const [archiveHistory, setArchiveHistory] = useState<any[]>([]);
-    
-    // [ENHANCEMENT: READ-ONLY VIEW & ACCOUNTING STATUS]
     const [viewingRecord, setViewingRecord] = useState<any | null>(null);
     const [accountingStatuses, setAccountingStatuses] = useState<Record<string, boolean>>({});
     const syncTrigger = useSync();
@@ -345,33 +440,24 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
                 if (saved) {
                     const history = JSON.parse(saved);
                     setArchiveHistory(history);
-                    
-                    // Sync accounting status from multiple sources
                     const statuses: Record<string, boolean> = {};
-                    
-                    // 1. Check legacy individual keys
                     history.forEach((log: any) => {
                         const isDone = localStorage.getItem(`accounting_task_complete_${log.id}`);
                         if (isDone === 'true') statuses[log.id] = true;
                     });
-
-                    // 2. Check Dispatched Directives from Service (Real-time sync)
                     const dispatched = await getDispatchedDirectives();
                     dispatched.forEach(d => {
                         if (d.status === 'processed') {
-                            // Extract original ID if it was a bridge directive
                             const originalId = d.id.startsWith('dir_') ? d.id.substring(4) : d.id;
                             statuses[originalId] = true;
                         }
                     });
-
                     setAccountingStatuses(statuses);
                 }
             } catch (e) {
                 console.error("Error syncing management data:", e);
             }
         };
-
         syncData();
     }, [syncTrigger]);
 
@@ -403,19 +489,15 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
                     const actual = weeklyRequests
                         .filter(r => r.assignedFundId === fund.id)
                         .reduce((sum, r) => sum + r.totalAmount, 0);
-                    
                     const rule = fundRules.find(r => r.id === fund.id) || { percentage: 0 };
-                    
                     let planned = 0;
                     if (fund.category === 'Direct') {
-                        planned = actual; 
+                        planned = actual;
                     } else {
                         planned = session.totalRevenue * (rule.percentage / 100);
                     }
-                    
                     return { id: fund.id, name: fund.name, category: fund.category, planned, actual, variance: planned - actual };
                 });
-
                 const fundsByCategory = {
                     Direct: funds.filter(f => f.category === 'Direct'),
                     Marginal: funds.filter(f => f.category === 'Marginal'),
@@ -429,7 +511,6 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
     const filteredBreakdown = useMemo(() => {
         if (!searchQuery) return weeklyBreakdown;
         const lowercasedQuery = searchQuery.toLowerCase();
-        
         return weeklyBreakdown
             .map(week => {
                 const filteredFundsByCategory: Record<string, any[]> = {};
@@ -449,9 +530,8 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
             .filter(Boolean) as typeof weeklyBreakdown;
     }, [searchQuery, weeklyBreakdown]);
 
-
     if (loading) return <div className="p-12 text-center text-gray-500">იტვირთება სრული სურათი...</div>;
-    
+
     const getStatusColor = (variance: number, planned: number) => {
         if (planned === 0 && variance === 0) return 'text-gray-300';
         if (planned === 0 && variance < 0) return 'text-orange-500';
@@ -464,38 +544,31 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
 
     const handleTransferToAccounting = async (id: number) => {
         if (!window.confirm("გსურთ მონაცემების ბუღალტერიაში გადაგზავნა?")) return;
-        
-        // 1. Update Local State & Storage
-        const updated = archiveHistory.map((item: any) => 
+        const updated = archiveHistory.map((item: any) =>
             item.id === id ? { ...item, status: 'SENT' } : item
         );
         setArchiveHistory(updated);
         localStorage.setItem('mgmt_archive_history', JSON.stringify(updated));
-
-        // 2. Dispatch to Mock Service (Bridge to standard flow for Accountant)
         const record = archiveHistory.find(r => r.id === id);
         if (record) {
-             const mockSession: any = {
-                 id: record.id.toString(),
-                 weekNumber: 0,
-                 periodStart: record.date,
-                 periodEnd: record.date,
-                 dateConducted: new Date(record.id).toISOString(),
-                 totalRevenue: record.totalRevenue,
-                 totalAmount: 0,
-                 netBalance: 0,
-                 status: 'archived'
-             };
-             try {
+            const mockSession: any = {
+                id: record.id.toString(),
+                weekNumber: 0,
+                periodStart: record.date,
+                periodEnd: record.date,
+                dateConducted: new Date(record.id).toISOString(),
+                totalRevenue: record.totalRevenue,
+                totalAmount: 0,
+                netBalance: 0,
+                status: 'archived'
+            };
+            try {
                 await dispatchDirectivesToAccounting(user, record.data, mockSession);
-             } catch(e) {
+            } catch (e) {
                 console.warn("Mock Service Dispatch Warning:", e);
-             }
+            }
         }
-        
-        // 3. Dispatch storage event for instant synchronization
         window.dispatchEvent(new Event('storage'));
-
         alert("დირექტივა წარმატებით გადაიგზავნა ბუღალტერიაში.");
     };
 
@@ -509,8 +582,7 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
 
     const renderRecordDetails = () => {
         if (!viewingRecord) return null;
-        const totalApp = viewingRecord.data?.reduce((sum:number, i:any) => sum + (i.approved || 0), 0) || 0;
-        
+        const totalApp = viewingRecord.data?.reduce((sum: number, i: any) => sum + (i.approved || 0), 0) || 0;
         return (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                 <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col">
@@ -538,7 +610,6 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
                                 <div className={`font-bold text-lg ${viewingRecord.status === 'SENT' ? 'text-green-600' : 'text-gray-700'}`}>{viewingRecord.status}</div>
                             </div>
                         </div>
-                        
                         <div className="border border-gray-200 rounded-lg overflow-x-auto">
                             <div className="min-w-[600px]">
                                 <table className="w-full text-xs text-left">
@@ -551,7 +622,7 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                        {viewingRecord.data?.map((item:any) => (
+                                        {viewingRecord.data?.map((item: any) => (
                                             <tr key={item.id} className="hover:bg-gray-50">
                                                 <td className="p-3 font-bold text-gray-800">{item.name}</td>
                                                 <td className="p-3 text-gray-500">{item.category}</td>
@@ -578,77 +649,75 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
     return (
         <div>
             {viewingRecord && renderRecordDetails()}
-            
-            {isAuthorized && (
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column',
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                padding: '16px', 
-                backgroundColor: '#f8fafc', 
-                borderRadius: '12px',
-                marginBottom: '45px',
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                borderBottom: '3px solid #3b82f6',
-                paddingBottom: '20px'
-              }} className="md:flex-row gap-4">
-                <h3 style={{ margin: 0, fontSize: '18px', color: '#1e293b', fontWeight: 700, letterSpacing: '-0.025em' }}>მართვის პანელი (ფინ. დირექტორი)</h3>
-                
-                <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                  <button
-                    onClick={() => {
-                        const snapshotData = integratedFundData.map(f => ({ ...f }));
-                        const snapshot = {
-                            id: Date.now(),
-                            date: new Date().toLocaleDateString('ka-GE'),
-                            totalRevenue: currentTotalRevenue, // Use actual calculated revenue
-                            status: 'ARCHIVED', 
-                            accountingStatus: 'pending', 
-                            data: snapshotData
-                        };
-                        const updatedHistory = [snapshot, ...archiveHistory]; 
-                        setArchiveHistory(updatedHistory);
-                        localStorage.setItem('mgmt_archive_history', JSON.stringify(updatedHistory));
-                        onStartNewWeek();
-                        alert("პერიოდი დახურულია და შენახულია არქივში.");
-                    }}
-                    className="py-3 px-6 rounded-lg bg-white text-slate-700 border border-slate-300 font-bold cursor-pointer w-full md:w-auto hover:bg-gray-50 active:scale-95 transition-all text-sm md:text-base shadow-sm"
-                  >
-                    დახურვა
-                  </button>
 
-                  <button
-                    onClick={onDispatchLiveDirective}
-                    disabled={isPeriodLocked}
-                    className={`py-3 px-6 rounded-lg bg-blue-600 text-white border-none font-bold w-full md:w-auto text-sm md:text-base transition-all ${isPeriodLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-blue-700'}`}
-                  >
-                    გადაცემა
-                  </button>
+            {isAuthorized && (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '16px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '12px',
+                    marginBottom: '45px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                    borderBottom: '3px solid #3b82f6',
+                    paddingBottom: '20px'
+                }} className="md:flex-row gap-4">
+                    <h3 style={{ margin: 0, fontSize: '18px', color: '#1e293b', fontWeight: 700, letterSpacing: '-0.025em' }}>მართვის პანელი (ფინ. დირექტორი)</h3>
+                    <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                        <button
+                            onClick={() => {
+                                const snapshotData = integratedFundData.map(f => ({ ...f }));
+                                const snapshot = {
+                                    id: Date.now(),
+                                    date: new Date().toLocaleDateString('ka-GE'),
+                                    totalRevenue: currentTotalRevenue,
+                                    status: 'ARCHIVED',
+                                    accountingStatus: 'pending',
+                                    data: snapshotData
+                                };
+                                const updatedHistory = [snapshot, ...archiveHistory];
+                                setArchiveHistory(updatedHistory);
+                                localStorage.setItem('mgmt_archive_history', JSON.stringify(updatedHistory));
+                                onStartNewWeek();
+                                alert("პერიოდი დახურულია და შენახულია არქივში.");
+                            }}
+                            className="py-3 px-6 rounded-lg bg-white text-slate-700 border border-slate-300 font-bold cursor-pointer w-full md:w-auto hover:bg-gray-50 active:scale-95 transition-all text-sm md:text-base shadow-sm"
+                        >
+                            დახურვა
+                        </button>
+                        <button
+                            onClick={onDispatchLiveDirective}
+                            disabled={isPeriodLocked}
+                            className={`py-3 px-6 rounded-lg bg-blue-600 text-white border-none font-bold w-full md:w-auto text-sm md:text-base transition-all ${isPeriodLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-blue-700'}`}
+                        >
+                            გადაცემა
+                        </button>
+                    </div>
                 </div>
-              </div>
             )}
 
-            <div style={{ 
-                height: '1px', 
-                backgroundColor: '#e2e8f0', 
-                margin: '35px 0', 
+            <div style={{
+                height: '1px',
+                backgroundColor: '#e2e8f0',
+                margin: '35px 0',
                 width: '100%',
-                position: 'relative', 
-                display: 'block', 
-                clear: 'both' 
+                position: 'relative',
+                display: 'block',
+                clear: 'both'
             }}>
-                <span style={{ 
-                    position: 'absolute', 
-                    top: '-12px', 
-                    left: '0', 
-                    backgroundColor: '#fff', 
-                    paddingRight: '15px', 
-                    fontSize: '13px', 
-                    color: '#64748b', 
-                    fontWeight: 'bold', 
-                    textTransform: 'uppercase' 
+                <span style={{
+                    position: 'absolute',
+                    top: '-12px',
+                    left: '0',
+                    backgroundColor: '#fff',
+                    paddingRight: '15px',
+                    fontSize: '13px',
+                    color: '#64748b',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase'
                 }}>
                     📁 არქივის ჩანაწერები
                 </span>
@@ -671,23 +740,22 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
                                 <tr><td colSpan={5} className="px-4 py-3 text-center text-gray-400">ისტორია ცარიელია</td></tr>
                             ) : (
                                 archiveHistory.map((log: any) => {
-                                    const totalApproved = log.data?.reduce((sum: number, item: any) => sum + (item.approved || 0), 0) || 0;
+                                    const totalApprovedLog = log.data?.reduce((sum: number, item: any) => sum + (item.approved || 0), 0) || 0;
                                     const isAccComplete = accountingStatuses[log.id];
                                     const isSent = log.status === 'SENT';
-                                    
                                     return (
                                         <tr key={log.id} className="hover:bg-gray-50">
                                             <td className="px-4 py-3 font-bold text-gray-700">{log.date}</td>
                                             <td className="px-4 py-3 text-right font-mono">{formatNumber(log.totalRevenue)} ₾</td>
-                                            <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">{formatNumber(totalApproved)} ₾</td>
+                                            <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">{formatNumber(totalApprovedLog)} ₾</td>
                                             <td className="px-4 py-3 text-center">
                                                 {isAccComplete ? (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-green-100 text-green-700 border border-green-200">
-                                                        <CheckCircle2 size={12}/> შესრულებულია
+                                                        <CheckCircle2 size={12} /> შესრულებულია
                                                     </span>
                                                 ) : isSent ? (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-700 border border-blue-200">
-                                                        <Send size={12}/> გადაცემულია
+                                                        <Send size={12} /> გადაცემულია
                                                     </span>
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-gray-600 border border-gray-200">
@@ -696,35 +764,33 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
                                                 )}
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                               <div className="flex items-center justify-center gap-2">
-                                                {!isSent && !isAccComplete && (
-                                                    <button 
-                                                        onClick={() => handleTransferToAccounting(log.id)}
-                                                        className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                                                        title="გადაცემა"
+                                                <div className="flex items-center justify-center gap-2">
+                                                    {!isSent && !isAccComplete && (
+                                                        <button
+                                                            onClick={() => handleTransferToAccounting(log.id)}
+                                                            className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                                            title="გადაცემა"
+                                                        >
+                                                            <ArrowRightLeft size={16} />
+                                                        </button>
+                                                    )}
+                                                    {isSent && !isAccComplete && (
+                                                        <button
+                                                            onClick={() => handleAccountingComplete(log.id)}
+                                                            className="p-1.5 bg-green-50 text-green-600 hover:bg-green-100 rounded transition-colors"
+                                                            title="შესრულება"
+                                                        >
+                                                            <CheckCircle2 size={16} />
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => setViewingRecord(log)}
+                                                        className="p-1.5 hover:bg-gray-200 rounded text-gray-600 transition-colors"
+                                                        title="დათვალიერება"
                                                     >
-                                                        <ArrowRightLeft size={16} />
+                                                        <Eye size={16} />
                                                     </button>
-                                                )}
-                                                
-                                                {isSent && !isAccComplete && (
-                                                    <button 
-                                                        onClick={() => handleAccountingComplete(log.id)}
-                                                        className="p-1.5 bg-green-50 text-green-600 hover:bg-green-100 rounded transition-colors"
-                                                        title="შესრულება"
-                                                    >
-                                                        <CheckCircle2 size={16} />
-                                                    </button>
-                                                )}
-
-                                                <button 
-                                                    onClick={() => setViewingRecord(log)} 
-                                                    className="p-1.5 hover:bg-gray-200 rounded text-gray-600 transition-colors"
-                                                    title="დათვალიერება"
-                                                >
-                                                    <Eye size={16}/>
-                                                </button>
-                                               </div>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -758,19 +824,19 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
                                     <React.Fragment key={session.id}>
                                         <tr className="bg-gray-50 border-y-2 border-gray-200"><td colSpan={7} className="px-3 py-2 font-bold text-black">კვირა #{session.weekNumber} ({session.periodStart} - {session.periodEnd})</td></tr>
                                         {Object.entries(fundsByCategory).map(([category, funds]: [string, any]) => (
-                                        funds.length > 0 && <React.Fragment key={category}>
-                                            {funds.map((fund: any, index: number) => (
-                                                <tr key={fund.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                                    {index === 0 && <td rowSpan={funds.length} className="px-3 py-2 align-top font-bold text-gray-500 border-r">{session.dateConducted ? new Date(session.dateConducted).toLocaleDateString('ka-GE') : '-'}</td>}
-                                                    {index === 0 && <td rowSpan={funds.length} className="px-3 py-2 align-top font-bold border-r">{category}</td>}
-                                                    <td className="px-3 py-2">{fund.name}</td>
-                                                    <td className="px-3 py-2 text-right font-mono text-gray-700">{formatNumber(fund.planned)}</td>
-                                                    <td className="px-3 py-2 text-right font-mono font-bold">{formatNumber(fund.actual)}</td>
-                                                    <td className={`px-3 py-2 text-right font-mono font-bold ${fund.variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatNumber(fund.variance)}</td>
-                                                    <td className="px-3 py-2 text-center"><Circle size={12} className={getStatusColor(fund.variance, fund.planned)} fill="currentColor" /></td>
-                                                </tr>
-                                            ))}
-                                        </React.Fragment>
+                                            funds.length > 0 && <React.Fragment key={category}>
+                                                {funds.map((fund: any, index: number) => (
+                                                    <tr key={fund.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                                        {index === 0 && <td rowSpan={funds.length} className="px-3 py-2 align-top font-bold text-gray-500 border-r">{session.dateConducted ? new Date(session.dateConducted).toLocaleDateString('ka-GE') : '-'}</td>}
+                                                        {index === 0 && <td rowSpan={funds.length} className="px-3 py-2 align-top font-bold border-r">{category}</td>}
+                                                        <td className="px-3 py-2">{fund.name}</td>
+                                                        <td className="px-3 py-2 text-right font-mono text-gray-700">{formatNumber(fund.planned)}</td>
+                                                        <td className="px-3 py-2 text-right font-mono font-bold">{formatNumber(fund.actual)}</td>
+                                                        <td className={`px-3 py-2 text-right font-mono font-bold ${fund.variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatNumber(fund.variance)}</td>
+                                                        <td className="px-3 py-2 text-center"><Circle size={12} className={getStatusColor(fund.variance, fund.planned)} fill="currentColor" /></td>
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
                                         ))}
                                     </React.Fragment>
                                 ))}
@@ -783,81 +849,87 @@ const FullOverviewTab: React.FC<FullOverviewTabProps> = ({ allRequests, sessions
     );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ManagementView — Main Component
+// KEY CHANGE: handleUpdateDirective now recalculates non-Direct funds
+//   proportionally from the remaining budget when any Direct fund changes.
+// ─────────────────────────────────────────────────────────────────────────────
 export const ManagementView: React.FC<{ user: User }> = ({ user }) => {
-  const [activeTab, setActiveTab] = useState<ManagementTab>('cover');
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [activeTab, setActiveTab] = useState<ManagementTab>('cover');
+    const [loading, setLoading] = useState(true);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [revenueCategories, setRevenueCategories] = useState<any[]>([]);
-  const [expenseFunds, setExpenseFunds] = useState<any[]>([]);
-  const [realTimeBalances, setRealTimeBalances] = useState<FundBalance[]>([]);
-  const [allRequests, setAllRequests] = useState<ExpenseRequest[]>([]);
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [fundRules, setFundRules] = useState<any[]>([]);
-  const [budget2026, setBudget2026] = useState<any[]>([]);
-  
-  const [directiveOverrides, setDirectiveOverrides] = useState<Record<string, number>>({});
-  const [hiddenFunds, setHiddenFunds] = useState<Record<string, boolean>>({});
-  const [isPeriodLocked, setIsPeriodLocked] = useState(false);
-  const syncTrigger = useSync();
+    const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+    const [revenueCategories, setRevenueCategories] = useState<any[]>([]);
+    const [expenseFunds, setExpenseFunds] = useState<any[]>([]);
+    const [realTimeBalances, setRealTimeBalances] = useState<FundBalance[]>([]);
+    const [allRequests, setAllRequests] = useState<ExpenseRequest[]>([]);
+    const [sessions, setSessions] = useState<any[]>([]);
+    const [fundRules, setFundRules] = useState<any[]>([]);
+    const [budget2026, setBudget2026] = useState<any[]>([]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    const [banks, cats, funds, balances, reqs, sess, budget] = await Promise.all([
-        getBankAccounts(),
-        getRevenueCategories(),
-        getExpenseFunds(),
-        getRealTimeFundBalances(),
-        getAllRequests(),
-        getFinancialCouncilSessions(),
-        getAnnualBudget(2026)
-    ]);
+    // directiveOverrides stores MANUALLY set approved values for ALL funds
+    const [directiveOverrides, setDirectiveOverrides] = useState<Record<string, number>>({});
+    const [hiddenFunds, setHiddenFunds] = useState<Record<string, boolean>>({});
+    const [isPeriodLocked, setIsPeriodLocked] = useState(false);
+    const syncTrigger = useSync();
 
-    setBankAccounts(banks);
-    setRevenueCategories(cats);
-    setExpenseFunds(funds);
-    setRealTimeBalances(balances);
-    setAllRequests(reqs);
-    setSessions(sess);
-    setBudget2026(budget);
-    
-    const totalRevenue2026 = budget
-          .filter((item: any) => item.type === 'revenue')
-          .reduce((sum: number, item: any) => sum + (item.plannedAmount || 0), 0);
-    const budget2026MapByName = new Map(budget.map((item: any) => [item.name, item]));
+    const fetchData = async () => {
+        setLoading(true);
+        const [banks, cats, funds, balances, reqs, sess, budget] = await Promise.all([
+            getBankAccounts(),
+            getRevenueCategories(),
+            getExpenseFunds(),
+            getRealTimeFundBalances(),
+            getAllRequests(),
+            getFinancialCouncilSessions(),
+            getAnnualBudget(2026)
+        ]);
 
-    const rules = funds.map((fund: any) => {
-        const budgetItem = budget2026MapByName.get(fund.name);
-        let percentage = 0;
-        if (budgetItem && totalRevenue2026 > 0) {
-            percentage = (Math.abs(budgetItem.plannedAmount) / totalRevenue2026) * 100;
-        }
-        return { id: fund.id, percentage };
-    });
-    setFundRules(rules);
+        setBankAccounts(banks);
+        setRevenueCategories(cats);
+        setExpenseFunds(funds);
+        setRealTimeBalances(balances);
+        setAllRequests(reqs);
+        setSessions(sess);
+        setBudget2026(budget);
 
-    setLastUpdated(new Date());
-    setLoading(false);
-  };
+        const totalRevenue2026 = budget
+            .filter((item: any) => item.type === 'revenue')
+            .reduce((sum: number, item: any) => sum + (item.plannedAmount || 0), 0);
+        const budget2026MapByName = new Map(budget.map((item: any) => [item.name, item]));
 
-  useEffect(() => {
-    fetchData();
-  }, [syncTrigger]);
+        const rules = funds.map((fund: any) => {
+            const budgetItem = budget2026MapByName.get(fund.name);
+            let percentage = 0;
+            if (budgetItem && totalRevenue2026 > 0) {
+                percentage = (Math.abs(budgetItem.plannedAmount) / totalRevenue2026) * 100;
+            }
+            return { id: fund.id, percentage };
+        });
+        setFundRules(rules);
 
-  const handleStartNewWeek = async () => {
-      setDirectiveOverrides({});
-      setIsPeriodLocked(false);
-      await fetchData();
-  };
+        setLastUpdated(new Date());
+        setLoading(false);
+    };
 
-  const aggregatedRevenue = useMemo(() => {
-      const categoryMap = revenueCategories.reduce((acc: any, cat: any) => {
+    useEffect(() => {
+        fetchData();
+    }, [syncTrigger]);
+
+    const handleStartNewWeek = async () => {
+        setDirectiveOverrides({});
+        setIsPeriodLocked(false);
+        await fetchData();
+    };
+
+    const aggregatedRevenue = useMemo(() => {
+        const categoryMap = revenueCategories.reduce((acc: any, cat: any) => {
             acc[cat.id] = cat.name;
             return acc;
         }, {} as Record<string, string>);
 
-      return bankAccounts.reduce((acc: any, account: any) => {
+        return bankAccounts.reduce((acc: any, account: any) => {
             if (account.mappedCategoryId) {
                 const categoryName = categoryMap[account.mappedCategoryId];
                 if (categoryName) {
@@ -869,165 +941,255 @@ export const ManagementView: React.FC<{ user: User }> = ({ user }) => {
             }
             return acc;
         }, {} as AggregatedRevenue);
-  }, [bankAccounts, revenueCategories]);
+    }, [bankAccounts, revenueCategories]);
 
-  const integratedFundData: IntegratedFundData[] = useMemo(() => {
-      const totalRevenue = bankAccounts
-        .filter(b => !!b.mappedCategoryId)
-        .reduce((sum, b) => sum + b.currentBalance, 0);
+    // ── Total revenue from linked bank accounts ──────────────────────────────
+    const totalRevenue = useMemo(() =>
+        bankAccounts
+            .filter(b => !!b.mappedCategoryId)
+            .reduce((sum, b) => sum + b.currentBalance, 0),
+        [bankAccounts]
+    );
 
-      return expenseFunds.map(fund => {
-          const rule = fundRules.find((r: any) => r.id === fund.id) || { percentage: 0 };
-          const balance = realTimeBalances.find(b => b.id === fund.id);
-          
-          const calculated = (totalRevenue * rule.percentage) / 100;
-          const approved = directiveOverrides[fund.id] !== undefined ? directiveOverrides[fund.id] : calculated;
-          
-          return {
-              id: fund.id,
-              name: fund.name,
-              category: fund.category,
-              available: totalRevenue, 
-              calculated: calculated,
-              approved: approved,
-              carryOver: 0, 
-              expense: balance?.totalSpent || 0,
-              returnedUnspent: 0, 
-              distributionPercentage: rule.percentage
-          };
-      });
-  }, [expenseFunds, fundRules, realTimeBalances, bankAccounts, directiveOverrides]);
+    // ── integratedFundData — core computed state ──────────────────────────────
+    //
+    //  Logic:
+    //  1. Direct funds: approved = manual override (or 0 if no override yet set)
+    //  2. Sum of Direct approved = directSumApproved
+    //  3. Remaining = totalRevenue - directSumApproved
+    //  4. Non-Direct funds: approved = proportional share of remaining, unless
+    //     the user has manually overridden them.
+    //  5. Proportional share for fund X = (X.pct / totalNonDirectPct) * remaining
+    //     — this normalises percentages so they always sum to 100% of the remaining.
+    //
+    const integratedFundData: IntegratedFundData[] = useMemo(() => {
+        // Separate fund IDs by category
+        const directFundIds = new Set(
+            expenseFunds.filter(f => f.category === 'Direct').map(f => f.id)
+        );
 
-  const revenueSummary = useMemo(() => {
-      const totals: any = { projects: 0, service: 0, parts: 0, returned: 0, total: 0 };
-      Object.entries(aggregatedRevenue).forEach(([cat, banks]) => {
-          const sum = Object.values(banks).reduce((a, b) => a + b, 0);
-          if (cat === 'პროექტები') totals.projects += sum;
-          else if (cat === 'სერვისი') totals.service += sum;
-          else if (cat === 'ნაწილები') totals.parts += sum;
-          totals.total += sum;
-      });
-      return totals;
-  }, [aggregatedRevenue]);
+        // Sum of manually approved Direct fund values
+        const directSumApproved = expenseFunds
+            .filter(f => f.category === 'Direct')
+            .reduce((sum, f) => {
+                const override = directiveOverrides[f.id];
+                return sum + (override !== undefined ? override : 0);
+            }, 0);
 
-  const marginSummary = { projects: 0, service: 0, parts: 0, adjustable: 0 }; 
+        // Remaining budget after direct costs
+        const remaining = totalRevenue - directSumApproved;
 
-  const handleUpdateDirective = (id: string, value: number) => {
-      if (isPeriodLocked) return;
-      setDirectiveOverrides(prev => ({ ...prev, [id]: value }));
-  };
+        // Total % of non-Direct funds (to normalise)
+        const nonDirectFunds = expenseFunds.filter(f => f.category !== 'Direct');
+        const nonDirectTotalPct = nonDirectFunds.reduce((sum, f) => {
+            const rule = fundRules.find((r: any) => r.id === f.id) || { percentage: 0 };
+            return sum + rule.percentage;
+        }, 0);
 
-  const toggleFundVisibility = (id: string) => setHiddenFunds(prev => ({ ...prev, [id]: !prev[id] }));
-  const toggleSectionVisibility = (cat: string) => {
-      const funds = expenseFunds.filter(f => f.category === cat);
-      const allHidden = funds.every(f => hiddenFunds[f.id]);
-      const newState = { ...hiddenFunds };
-      funds.forEach(f => newState[f.id] = !allHidden);
-      setHiddenFunds(newState);
-  };
+        return expenseFunds.map(fund => {
+            const rule = fundRules.find((r: any) => r.id === fund.id) || { percentage: 0 };
+            const balance = realTimeBalances.find(b => b.id === fund.id);
+            const isDirect = directFundIds.has(fund.id);
 
-  const handleDispatchLiveDirective = async () => {
-    // 1. Create Snapshot Data
-    const snapshotData = integratedFundData.map(f => ({
-      fundName: f.name,
-      category: f.category,
-      approvedAmount: f.approved
-    }));
+            // "Calculated" column — what the formula would give without any override
+            const calculated = isDirect
+                ? 0  // Direct funds have no formula-based calculation
+                : nonDirectTotalPct > 0
+                    ? (rule.percentage / nonDirectTotalPct) * remaining
+                    : 0;
 
-    const snapshot: DirectiveSnapshot = {
-        id: Date.now().toString(),
-        weekNumber: 0, // Should calculate current week properly in real scenario
-        periodStart: new Date().toLocaleDateString('ka-GE'),
-        periodEnd: new Date().toLocaleDateString('ka-GE'),
-        dispatchedByUserId: user.id,
-        dispatchedByName: user.name,
-        dispatchedAt: new Date().toISOString(),
-        directivesData: snapshotData,
-        status: 'pending'
+            // "Approved" column — manual override takes priority
+            let approved: number;
+            if (directiveOverrides[fund.id] !== undefined) {
+                // User has explicitly set a value (works for both Direct and non-Direct)
+                approved = directiveOverrides[fund.id];
+            } else if (isDirect) {
+                // Direct funds start at 0 until manually set
+                approved = 0;
+            } else {
+                // Non-Direct: use proportional calculated value
+                approved = calculated;
+            }
+
+            return {
+                id: fund.id,
+                name: fund.name,
+                category: fund.category,
+                available: totalRevenue,
+                calculated,
+                approved,
+                carryOver: 0,
+                expense: balance?.totalSpent || 0,
+                returnedUnspent: 0,
+                distributionPercentage: rule.percentage,
+            };
+        });
+    }, [expenseFunds, fundRules, realTimeBalances, totalRevenue, directiveOverrides]);
+
+    const revenueSummary = useMemo(() => {
+        const totals: any = { projects: 0, service: 0, parts: 0, returned: 0, total: 0 };
+        Object.entries(aggregatedRevenue).forEach(([cat, banks]) => {
+            const sum = Object.values(banks as Record<string, number>).reduce((a, b) => a + b, 0);
+            if (cat === 'პროექტები') totals.projects += sum;
+            else if (cat === 'სერვისი') totals.service += sum;
+            else if (cat === 'ნაწილები') totals.parts += sum;
+            totals.total += sum;
+        });
+        return totals;
+    }, [aggregatedRevenue]);
+
+    const marginSummary = { projects: 0, service: 0, parts: 0, adjustable: 0 };
+
+    // ── handleUpdateDirective ─────────────────────────────────────────────────
+    //
+    //  When a Direct fund is updated manually, we need to recalculate non-Direct
+    //  approved values proportionally from the new remaining budget.
+    //
+    //  Strategy: store ONLY Direct overrides in directiveOverrides; non-Direct
+    //  overrides are also stored if the user edits them directly.  The
+    //  integratedFundData memo always re-derives non-Direct approved values from
+    //  the remaining budget UNLESS the user has explicitly overridden them.
+    //
+    //  To allow resetting non-Direct back to auto on Direct change, we clear any
+    //  non-Direct overrides that were NOT manually touched by the user (tracked
+    //  via a separate flag set).  For simplicity in this implementation we always
+    //  recalculate non-Direct from scratch when any Direct fund is changed —
+    //  meaning non-Direct manual overrides are preserved only until the next
+    //  Direct fund edit.  This matches the described requirement.
+    //
+    const handleUpdateDirective = (id: string, value: number) => {
+        if (isPeriodLocked) return;
+
+        const isDirect = expenseFunds.find(f => f.id === id)?.category === 'Direct';
+
+        if (isDirect) {
+            // When a Direct fund changes, clear all non-Direct overrides so they
+            // get recalculated proportionally from the new remaining budget.
+            setDirectiveOverrides(prev => {
+                const directOnlyOverrides: Record<string, number> = {};
+                expenseFunds.forEach(f => {
+                    if (f.category === 'Direct') {
+                        directOnlyOverrides[f.id] = f.id === id ? value : (prev[f.id] !== undefined ? prev[f.id] : 0);
+                    }
+                    // Non-Direct overrides are intentionally dropped here so they
+                    // revert to the auto-calculated proportional value.
+                });
+                return directOnlyOverrides;
+            });
+        } else {
+            // Manual override for a non-Direct fund — just store the value.
+            setDirectiveOverrides(prev => ({ ...prev, [id]: value }));
+        }
     };
 
-    // 2. Save to Storage
-    addDirective(snapshot);
+    const toggleFundVisibility = (id: string) =>
+        setHiddenFunds(prev => ({ ...prev, [id]: !prev[id] }));
 
-    // 3. Dispatch to Mock Service (for visual consistency in other components if needed)
-    // We mock the session object required by the legacy mock function
-    const mockSession = {
-        id: snapshot.id,
-        weekNumber: 0,
-        periodStart: snapshot.periodStart,
-        periodEnd: snapshot.periodEnd,
-        dateConducted: snapshot.dispatchedAt,
-        totalRevenue: revenueSummary.total,
-        totalAmount: 0,
-        netBalance: 0,
-        status: 'active'
+    const toggleSectionVisibility = (cat: string) => {
+        const funds = expenseFunds.filter(f => f.category === cat);
+        const allHidden = funds.every(f => hiddenFunds[f.id]);
+        const newState = { ...hiddenFunds };
+        funds.forEach(f => (newState[f.id] = !allHidden));
+        setHiddenFunds(newState);
     };
-    await dispatchDirectivesToAccounting(user, integratedFundData, mockSession as any);
 
-    // 4. Lock UI
-    setIsPeriodLocked(true);
-    alert("დირექტივა წარმატებით გადაიგზავნა ბუღალტერიაში.");
-  };
+    const handleDispatchLiveDirective = async () => {
+        const snapshotData = integratedFundData.map(f => ({
+            fundName: f.name,
+            category: f.category,
+            approvedAmount: f.approved
+        }));
 
-  const tabs = [
-      { id: 'cover', label: 'თავფურცელი', icon: Briefcase },
-      { id: 'revenue', label: 'შემოსავლები', icon: Download },
-      { id: 'funds', label: 'ფონდები', icon: RefreshCw },
-      { id: 'directives', label: 'დირექტივა', icon: ArrowRightLeft },
-      { id: 'full', label: 'სრული სურათი', icon: Eye },
-  ];
+        const snapshot: DirectiveSnapshot = {
+            id: Date.now().toString(),
+            weekNumber: 0,
+            periodStart: new Date().toLocaleDateString('ka-GE'),
+            periodEnd: new Date().toLocaleDateString('ka-GE'),
+            dispatchedByUserId: user.id,
+            dispatchedByName: user.name,
+            dispatchedAt: new Date().toISOString(),
+            directivesData: snapshotData,
+            status: 'pending'
+        };
 
-  return (
-      <div className="space-y-6 font-sans">
-          <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
-              <div className="flex overflow-x-auto scrollbar-hide">
-                  {tabs.map(tab => (
-                      <button
-                          key={tab.id}
-                          onClick={() => setActiveTab(tab.id as ManagementTab)}
-                          className={`flex items-center gap-2 px-6 py-4 text-sm font-bold uppercase transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-b-2 border-black text-black' : 'text-gray-500 hover:text-black'}`}
-                      >
-                          <tab.icon size={18} />
-                          {tab.label}
-                      </button>
-                  ))}
-              </div>
-          </div>
+        addDirective(snapshot);
 
-          <div className="bg-white p-6 border border-gray-200 rounded-lg shadow-sm min-h-[600px]">
-              {activeTab === 'cover' && <CoverPageTab />}
-              {activeTab === 'revenue' && <RevenueSummaryTab data={aggregatedRevenue} loading={loading} lastUpdated={lastUpdated} />}
-              {activeTab === 'funds' && <FundsTab data={integratedFundData} hiddenFunds={hiddenFunds} />}
-              {activeTab === 'directives' && (
-                  <DirectivesTab 
-                    data={integratedFundData} 
-                    revenue={revenueSummary} 
-                    margin={marginSummary} 
-                    onUpdate={handleUpdateDirective} 
-                    user={user}
-                    hiddenFunds={hiddenFunds}
-                    toggleFundVisibility={toggleFundVisibility}
-                    toggleSectionVisibility={toggleSectionVisibility}
-                    isLocked={isPeriodLocked}
-                  />
-              )}
-              {activeTab === 'full' && (
-                  <FullOverviewTab 
-                    allRequests={allRequests} 
-                    sessions={sessions} 
-                    expenseFunds={expenseFunds} 
-                    fundRules={fundRules} 
-                    fundBalances={realTimeBalances} 
-                    loading={loading} 
-                    user={user}
-                    integratedFundData={integratedFundData}
-                    onStartNewWeek={handleStartNewWeek}
-                    isPeriodLocked={isPeriodLocked}
-                    onDispatchLiveDirective={handleDispatchLiveDirective}
-                    currentTotalRevenue={revenueSummary.total}
-                  />
-              )}
-          </div>
-      </div>
-  );
+        const mockSession = {
+            id: snapshot.id,
+            weekNumber: 0,
+            periodStart: snapshot.periodStart,
+            periodEnd: snapshot.periodEnd,
+            dateConducted: snapshot.dispatchedAt,
+            totalRevenue: revenueSummary.total,
+            totalAmount: 0,
+            netBalance: 0,
+            status: 'active'
+        };
+        await dispatchDirectivesToAccounting(user, integratedFundData, mockSession as any);
+
+        setIsPeriodLocked(true);
+        alert("დირექტივა წარმატებით გადაიგზავნა ბუღალტერიაში.");
+    };
+
+    const tabs = [
+        { id: 'cover', label: 'თავფურცელი', icon: Briefcase },
+        { id: 'revenue', label: 'შემოსავლები', icon: Download },
+        { id: 'funds', label: 'ფონდები', icon: RefreshCw },
+        { id: 'directives', label: 'დირექტივა', icon: ArrowRightLeft },
+        { id: 'full', label: 'სრული სურათი', icon: Eye },
+    ];
+
+    return (
+        <div className="space-y-6 font-sans">
+            <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
+                <div className="flex overflow-x-auto scrollbar-hide">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as ManagementTab)}
+                            className={`flex items-center gap-2 px-6 py-4 text-sm font-bold uppercase transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-b-2 border-black text-black' : 'text-gray-500 hover:text-black'}`}
+                        >
+                            <tab.icon size={18} />
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="bg-white p-6 border border-gray-200 rounded-lg shadow-sm min-h-[600px]">
+                {activeTab === 'cover' && <CoverPageTab />}
+                {activeTab === 'revenue' && <RevenueSummaryTab data={aggregatedRevenue} loading={loading} lastUpdated={lastUpdated} />}
+                {activeTab === 'funds' && <FundsTab data={integratedFundData} hiddenFunds={hiddenFunds} />}
+                {activeTab === 'directives' && (
+                    <DirectivesTab
+                        data={integratedFundData}
+                        revenue={revenueSummary}
+                        margin={marginSummary}
+                        onUpdate={handleUpdateDirective}
+                        user={user}
+                        hiddenFunds={hiddenFunds}
+                        toggleFundVisibility={toggleFundVisibility}
+                        toggleSectionVisibility={toggleSectionVisibility}
+                        isLocked={isPeriodLocked}
+                    />
+                )}
+                {activeTab === 'full' && (
+                    <FullOverviewTab
+                        allRequests={allRequests}
+                        sessions={sessions}
+                        expenseFunds={expenseFunds}
+                        fundRules={fundRules}
+                        fundBalances={realTimeBalances}
+                        loading={loading}
+                        user={user}
+                        integratedFundData={integratedFundData}
+                        onStartNewWeek={handleStartNewWeek}
+                        isPeriodLocked={isPeriodLocked}
+                        onDispatchLiveDirective={handleDispatchLiveDirective}
+                        currentTotalRevenue={revenueSummary.total}
+                    />
+                )}
+            </div>
+        </div>
+    );
 };
