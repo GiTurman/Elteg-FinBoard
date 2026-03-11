@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, ExpenseRequest, RequestStatus } from '../types';
-import { getAllRequests, useSync } from '../services/mockService';
+import { getAllRequests, useSync, clearArchivedRequests } from '../services/mockService';
 import { 
   Archive, 
   Calendar, 
@@ -120,12 +120,20 @@ export const GlobalArchive: React.FC<GlobalArchiveProps> = ({ user }) => {
             <p className="text-sm font-bold text-gray-500 tracking-wide uppercase">ისტორიული ჩანაწერები</p>
           </div>
         </div>
-        <button 
-          onClick={handleExport}
-          className="px-4 py-2 border border-black text-black font-bold text-xs uppercase hover:bg-black hover:text-white transition-colors"
-        >
-          სრული რეპორტის ექსპორტი
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={handleExport}
+            className="px-4 py-2 border border-black text-black font-bold text-xs uppercase hover:bg-black hover:text-white transition-colors"
+          >
+            სრული რეპორტის ექსპორტი
+          </button>
+          <button 
+            onClick={async () => { if(confirm('ნამდვილად გსურთ არქივის გასუფთავება?')) { await clearArchivedRequests(); } }}
+            className="px-4 py-2 border border-red-600 text-red-600 font-bold text-xs uppercase hover:bg-red-600 hover:text-white transition-colors"
+          >
+            არქივის გასუფთავება
+          </button>
+        </div>
       </div>
 
       {/* Filters Bar */}

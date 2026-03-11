@@ -1666,6 +1666,16 @@ const handleStateUpdated = (data: any) => {
   window.dispatchEvent(new Event('finboard_sync'));
 };
 
+export const clearArchivedRequests = async (): Promise<void> => {
+  REQUESTS = REQUESTS.filter(r => 
+    r.status !== RequestStatus.PAID && 
+    r.status !== RequestStatus.REJECTED &&
+    r.status !== RequestStatus.APPROVED_FOR_PAYMENT
+  );
+  localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
+  window.dispatchEvent(new Event('finboard_sync'));
+};
+
 const initSupabaseSync = () => {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
