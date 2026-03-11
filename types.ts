@@ -74,7 +74,7 @@ export enum Priority {
 
 export interface BoardSession {
   id: string;
-  weekDate: string; // ISO string representing the Thursday of that week
+  weekDate: string; // ISO string representing the Wednesday of that week
   startTime: string;
   endTime?: string;
   isActive: boolean;

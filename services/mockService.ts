@@ -1196,23 +1196,30 @@ const EXEMPT_ROLES = [UserRole.FIN_DIRECTOR, UserRole.CEO, UserRole.FOUNDER];
 const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole): Date => {
   const date = new Date(submissionDate);
   
-  // Find the closest upcoming Thursday
-  const day = date.getDay(); // 0=Sun, 4=Thu
-  const daysUntilThursday = (4 - day + 7) % 7;
+  // Target: Wednesday (3) at 17:00
+  const targetDay = 3; // Wednesday
+  const targetHour = 17;
   
-  const boardDate = new Date(date);
-  boardDate.setDate(date.getDate() + daysUntilThursday);
-  boardDate.setHours(16, 0, 0, 0);
+  // Find the Wednesday of the current week
+  const currentDay = date.getDay();
+  const diff = targetDay - currentDay;
+  
+  const thisWeekWednesday = new Date(date);
+  thisWeekWednesday.setDate(date.getDate() + diff);
+  thisWeekWednesday.setHours(targetHour, 0, 0, 0);
   
   if (EXEMPT_ROLES.includes(userRole)) {
-    return boardDate;
+    return thisWeekWednesday;
   }
   
-  if (date > boardDate) {
-    boardDate.setDate(boardDate.getDate() + 7);
+  // If the submission is after this week's Wednesday 17:00, it goes to next week
+  if (date > thisWeekWednesday) {
+    const nextWeekWednesday = new Date(thisWeekWednesday);
+    nextWeekWednesday.setDate(thisWeekWednesday.getDate() + 7);
+    return nextWeekWednesday;
   }
   
-  return boardDate;
+  return thisWeekWednesday;
 };
 
 
@@ -1362,38 +1369,38 @@ export const updateRequestDetails = async (requestId: string, updates: Partial<E
     }
 };
 
-export const resubmitRequest = async (requestId: string, updates: Partial<ExpenseRequest>): Promise<void> => {
+export const resubmitRequest = async (requestId: string, updates: Partial<ExpenseRequest>, actor?: User): Promise<void> => {
   const index = REQUESTS.findIndex(r => r.id === requestId);
   if (index !== -1 && REQUESTS[index].status === RequestStatus.RETURNED_TO_SENDER) {
+    const now = new Date();
+    const user = actor || Object.values(USERS).find(u => u.id === REQUESTS[index].userId);
+    
     REQUESTS[index] = { 
         ...REQUESTS[index], 
         ...updates,
         status: RequestStatus.WAITING_DEPT_APPROVAL, // Reset status
-        updatedAt: new Date().toISOString()
+        updatedAt: now.toISOString(),
+        boardDate: determineBoardDateForRequest(now, user?.role || UserRole.EMPLOYEE).toISOString()
     };
     syncRequests();
   }
 };
 
-export const getBoardDateForRequest = (createdAt: string): Date => {
-  const date = new Date(createdAt);
-  const day = date.getDay(); 
-  let daysUntilThursday = (4 - day + 7) % 7;
-  
-  const currentWeekThursday = new Date(date);
-  currentWeekThursday.setDate(date.getDate() + daysUntilThursday);
-  currentWeekThursday.setHours(16,0,0,0);
-  return currentWeekThursday;
-};
-
 // --- DATA FOR FINANCIAL COUNCIL ---
 export const getDirectorBoardRequests = async (): Promise<ExpenseRequest[]> => {
+  const activeSession = await getBoardSession();
   const relevantStatuses = [
     RequestStatus.COUNCIL_REVIEW,
     RequestStatus.FD_APPROVED,
   ];
-  return REQUESTS.filter(r => relevantStatuses.includes(r.status))
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  
+  let filtered = REQUESTS.filter(r => relevantStatuses.includes(r.status));
+  
+  if (activeSession) {
+    filtered = filtered.filter(r => r.boardDate === activeSession.weekDate);
+  }
+  
+  return filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 };
 
 export const getAllRequests = async (): Promise<ExpenseRequest[]> => {
@@ -1407,28 +1414,30 @@ export const getBoardSession = async (): Promise<BoardSession | null> => {
 // === BOARD SESSION LIFECYCLE (persist open/close + step) ===
 
 export const openBoardSession = async (user: User): Promise<BoardSession> => {
-    // Close any previously active sessions
-    BOARD_SESSIONS.forEach(s => {
-        if (s.isActive) {
-            s.isActive = false;
-            s.endTime = s.endTime || new Date().toISOString();
-        }
-    });
-
     const now = new Date();
-    const thursday = new Date(now);
-    const dayOfWeek = now.getDay();
-    const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
-    if (daysUntilThursday === 0 && now.getHours() >= 16) {
-        thursday.setDate(now.getDate() + 7);
-    } else {
-        thursday.setDate(now.getDate() + daysUntilThursday);
-    }
-    thursday.setHours(16, 0, 0, 0);
+    const sessionDate = determineBoardDateForRequest(now, user.role);
+    const weekDateStr = sessionDate.toISOString();
 
+    // 1. Check if there's already an active session
+    const existingActive = BOARD_SESSIONS.find(s => s.isActive);
+    if (existingActive) {
+        return existingActive;
+    }
+
+    // 2. Check if a session for this week already exists (even if closed)
+    // "Only one session opens, never more than one"
+    const existingSession = BOARD_SESSIONS.find(s => s.weekDate === weekDateStr);
+    if (existingSession) {
+        existingSession.isActive = true; // Re-open it
+        syncBoardSessions();
+        localStorage.setItem('finboard_council_step', '1');
+        return existingSession;
+    }
+
+    // 3. Create new session
     const session: BoardSession = {
         id: `board_${Date.now()}`,
-        weekDate: thursday.toISOString(),
+        weekDate: weekDateStr,
         startTime: now.toISOString(),
         isActive: true,
         attendees: [user.id],
@@ -1465,7 +1474,14 @@ export const getArchivedBoardSessions = async (): Promise<BoardSession[]> => {
 };
 
 export const getFdFinalRequests = async (): Promise<ExpenseRequest[]> => {
-    return REQUESTS.filter(r => r.status === RequestStatus.FD_APPROVED);
+    const activeSession = await getBoardSession();
+    let filtered = REQUESTS.filter(r => r.status === RequestStatus.FD_APPROVED);
+    
+    if (activeSession) {
+        filtered = filtered.filter(r => r.boardDate === activeSession.weekDate);
+    }
+    
+    return filtered;
 };
 
 export const getDispatchedRequests = async (): Promise<ExpenseRequest[]> => {
@@ -1732,23 +1748,26 @@ export const runSystemRestoreAndRemapP426 = async (log: (msg: string) => void) =
 
 // Helper for P425
 const getSimulatedDate = (weekOffset: number, isLate: boolean = false): Date => {
-    const now = new Date(); // e.g., Monday, Jan 26th
-    const dayOfWeek = now.getDay(); // Sunday is 0, Thursday is 4
-    const daysUntilThursday = (4 - dayOfWeek + 7) % 7;
+    const now = new Date(); 
+    const targetDay = 3; // Wednesday
+    const targetHour = 17;
     
-    // Target the Thursday of the specified week offset
-    const targetThursday = new Date(now);
-    targetThursday.setDate(now.getDate() + daysUntilThursday - (weekOffset * 7));
-    targetThursday.setHours(16, 0, 0, 0);
+    const dayOfWeek = now.getDay(); 
+    const diff = targetDay - dayOfWeek;
+    
+    // Target the Wednesday of the specified week offset
+    const targetWednesday = new Date(now);
+    targetWednesday.setDate(now.getDate() + diff - (weekOffset * 7));
+    targetWednesday.setHours(targetHour, 0, 0, 0);
 
-    const submissionDate = new Date(targetThursday);
+    const submissionDate = new Date(targetWednesday);
 
     if (isLate) {
-        // After 16:00 on Thursday
-        submissionDate.setHours(16, 5, 0, 0); // 16:05
+        // After 17:00 on Wednesday
+        submissionDate.setHours(targetHour, 5, 0, 0); // 17:05
     } else {
         // Sometime before the deadline in that week
-        const randomDayBefore = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3 days before
+        const randomDayBefore = Math.floor(Math.random() * 2) + 1; // 1 or 2 days before
         submissionDate.setDate(submissionDate.getDate() - randomDayBefore);
         submissionDate.setHours(11, 30, 0, 0); // e.g., 11:30 AM
     }
