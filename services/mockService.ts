@@ -1070,7 +1070,7 @@ const createNewRequest = (details: Partial<ExpenseRequest>, user: User): Expense
     priority: Priority.LOW,
     alternativesChecked: false,
     selectedOptionReason: '',
-    status: (user.role === UserRole.FOUNDER || user.role === UserRole.CEO || user.role === UserRole.FIN_DIRECTOR) 
+    status: (user.role === UserRole.FOUNDER || user.role === UserRole.CEO || user.role === UserRole.FIN_DIRECTOR || user.role === UserRole.ADMIN) 
             ? RequestStatus.COUNCIL_REVIEW 
             : RequestStatus.WAITING_DEPT_APPROVAL,
     createdAt: now.toISOString(),
@@ -1216,6 +1216,7 @@ export const getDirectorBoardRequests = async (): Promise<ExpenseRequest[]> => {
   const relevantStatuses = [
     RequestStatus.COUNCIL_REVIEW,
     RequestStatus.FD_APPROVED,
+    RequestStatus.WAITING_DEPT_APPROVAL,
   ];
   
   const filtered = REQUESTS.filter(r => relevantStatuses.includes(r.status));
