@@ -132,17 +132,7 @@ USERS = {
   }
 };
 
-const generateEmployees = () => {
-  let idCounter = 1;
-  ['Sales Dept', 'Marketing Dept', 'Procurement Dept'].forEach(dept => {
-    for(let i=0; i<2; i++) {
-      const uid = `u_comm_emp_${idCounter++}`;
-      USERS[uid] = { id: uid, name: `Comm Emp ${idCounter-1}`, email: `comm${idCounter-1}@elevators.ge`, role: UserRole.EMPLOYEE, department: dept, managerId: 'u_comm_dir', password: '123' };
-    }
-  });
-  // Add an extra employee for P422 testing
-  USERS['u_comm_emp_4'] = { id: 'u_comm_emp_4', name: `Comm Emp 4`, email: `comm4@elevators.ge`, role: UserRole.EMPLOYEE, department: 'Sales Dept', managerId: 'u_comm_dir', password: '123' };
-};
+
 
 try {
     const storedUsers = localStorage.getItem('finboard_users');
@@ -150,14 +140,10 @@ try {
         const parsed = JSON.parse(storedUsers);
         for (const key in USERS) delete USERS[key];
         Object.assign(USERS, parsed);
-    } else {
-        generateEmployees();
     }
 } catch(e) {
-    generateEmployees();
+    console.error("Failed to load users from local storage", e);
 }
-
-// --- PERSISTENCE LOGIC (LocalStorage) ---
 REQUESTS = [];
 try {
     const storedReqs = localStorage.getItem('finboard_requests');
@@ -192,6 +178,18 @@ export const resetDatabase = async () => {
   CURRENT_YEAR_ACTUALS = {};
   DEBTORS = [];
   CREDITORS = [];
+  BANK_ACCOUNTS = [
+    { id: 'ba_1', accountName: 'Main Operational', bankName: 'TBC Bank', iban: 'GE00TB110000000000001', currency: Currency.GEL, currentBalance: 0, lastSync: new Date().toISOString(), mappedCategoryId: 'rev_service', isAutoSync: true },
+    { id: 'ba_2', accountName: 'USD Reserve', bankName: 'Bank of Georgia', iban: 'GE00BG220000000000002', currency: Currency.USD, currentBalance: 0, lastSync: new Date().toISOString(), mappedCategoryId: 'rev_projects', isAutoSync: true },
+    { id: 'ba_3', accountName: 'Unmapped Incoming', bankName: 'Liberty Bank', iban: 'GE00LB330000000000003', currency: Currency.GEL, currentBalance: 0, lastSync: new Date().toISOString(), isAutoSync: true },
+    { id: 'ba_4', accountName: 'Petty Cash', bankName: 'Salaro', iban: 'CASH', currency: Currency.GEL, currentBalance: 0, lastSync: new Date().toISOString(), isAutoSync: false }
+  ];
+  REVENUE_CATEGORIES = [
+    { id: 'rev_projects', name: 'პროექტები', description: 'ახალი ლიფტების მონტაჟი', plannedAmount: 50000, actualAmount: 0 },
+    { id: 'rev_service', name: 'სერვისი', description: 'ყოველთვიური მომსახურება', plannedAmount: 30000, actualAmount: 0 },
+    { id: 'rev_parts', name: 'ნაწილები', description: 'სათადარიგო ნაწილების რეალიზაცია', plannedAmount: 15000, actualAmount: 0 },
+    { id: 'rev_other', name: 'სხვა', description: 'სხვა შემოსავლები', plannedAmount: 5000, actualAmount: 0 },
+  ];
 
   // Clear local storage
   const keysToClear = [
@@ -206,7 +204,9 @@ export const resetDatabase = async () => {
     'finboard_invoices',
     'finboard_current_year_actuals',
     'finboard_debtors',
-    'finboard_creditors'
+    'finboard_creditors',
+    'finboard_bank_accounts',
+    'finboard_revenue_categories'
   ];
   keysToClear.forEach(key => localStorage.removeItem(key));
 
@@ -223,6 +223,8 @@ export const resetDatabase = async () => {
   safeEmit('update_state', { key: 'currentYearActuals', value: CURRENT_YEAR_ACTUALS });
   safeEmit('update_state', { key: 'debtors', value: DEBTORS });
   safeEmit('update_state', { key: 'creditors', value: CREDITORS });
+  safeEmit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS });
+  safeEmit('update_state', { key: 'revenueCategories', value: REVENUE_CATEGORIES });
 
   // Try to clear Supabase requests table as well
   try {
@@ -235,11 +237,11 @@ export const resetDatabase = async () => {
 };
 
 // TEMPORARY RESET
-const RESET_VERSION = 'v3';
+const RESET_VERSION = 'v4_production_clean';
 if (localStorage.getItem('finboard_reset_version') !== RESET_VERSION) {
   resetDatabase().then(() => {
     localStorage.setItem('finboard_reset_version', RESET_VERSION);
-    console.log('Database reset to empty arrays successfully.');
+    console.log('Database initialized for production (clean).');
   });
 }
 
@@ -288,7 +290,7 @@ export const fetchRequestsFromSupabase = async () => {
       }
     }
   } catch (err) {
-    console.error('Critical error fetching from Supabase:', err);
+    console.warn('Critical error fetching from Supabase:', err);
   }
 };
 
@@ -351,27 +353,6 @@ export const toggleSectionVisibility = async (category: string): Promise<void> =
 
 
 // --- CASH INFLOW DATA (Persisted) ---
-const generateCashInflowRecords = (count: number, isCurrentWeek: boolean = true): CashInflowRecord[] => {
-  const records: CashInflowRecord[] = [];
-  const categories: ('პროექტები' | 'სერვისები' | 'ნაწილები')[] = ['პროექტები', 'სერვისები', 'ნაწილები'];
-  for (let i = 0; i < count; i++) {
-    const budgeted = 500 + Math.random() * 5000;
-    const actual = budgeted * (0.8 + Math.random() * 0.4);
-    const record: CashInflowRecord = {
-      id: `${isCurrentWeek ? 'cw' : 'arc'}_${Date.now()}_${i}`,
-      name: `სტრეს ტესტი კლიენტი #${i + 1}`,
-      category: categories[i % 3],
-      budgeted: Math.round(budgeted),
-      actual: Math.round(actual),
-      comment: `ავტომატური ჩანაწერი ${i + 1}`,
-      authorId: 'u_comm_dir',
-      timestamp: new Date().toISOString()
-    };
-    records.push(record);
-  }
-  return records;
-};
-
 const getWeekKey = (date: Date): string => {
   const d = new Date(date);
   const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1);
@@ -382,19 +363,8 @@ const getWeekKey = (date: Date): string => {
   return `${d.getFullYear()} - კვირა ${weekNumber}`;
 };
 
-const generateArchivedData = (): Record<string, CashInflowRecord[]> => {
-    const data: Record<string, CashInflowRecord[]> = {};
-    for (let week = 1; week <= 4; week++) {
-        const date = new Date();
-        date.setDate(date.getDate() - (week * 7));
-        const weekKey = getWeekKey(date);
-        data[weekKey] = generateCashInflowRecords(20, false).map(r => ({...r, date: date.toISOString()}));
-    }
-    return data;
-};
-
-CURRENT_WEEK_CASH_INFLOW = generateCashInflowRecords(50);
-ARCHIVED_CASH_INFLOW = generateArchivedData();
+CURRENT_WEEK_CASH_INFLOW = [];
+ARCHIVED_CASH_INFLOW = {};
 
 try {
     const storedCW = localStorage.getItem('finboard_cw_inflow');
@@ -411,8 +381,8 @@ const syncCashInflow = () => {
 };
 
 // --- DEBT/CREDIT DATA (Persisted) ---
-DEBTORS = Array.from({ length: 10 }, (_, i) => ({ id: `debtor_${i + 1}`, name: `კლიენტი A${i + 1}`, previousBalance: 12000, increase: 500, decrease: 200, currentBalance: 12300, comment: 'Initial' }));
-CREDITORS = Array.from({ length: 10 }, (_, i) => ({ id: `creditor_${i + 1}`, name: `მომწოდებელი B${i + 1}`, previousBalance: 8000, increase: 1000, decrease: 400, currentBalance: 8600, comment: 'Initial' }));
+DEBTORS = [];
+CREDITORS = [];
 
 try {
     const sDebtors = localStorage.getItem('finboard_debtors');
@@ -430,17 +400,17 @@ const syncDebts = () => {
 
 // --- BANKING DATA ---
 BANK_ACCOUNTS = [
-  { id: 'ba_1', accountName: 'Main Operational', bankName: 'TBC Bank', iban: 'GE00TB110000000000001', currency: Currency.GEL, currentBalance: 45000, lastSync: new Date().toISOString(), mappedCategoryId: 'rev_service', isAutoSync: true },
-  { id: 'ba_2', accountName: 'USD Reserve', bankName: 'Bank of Georgia', iban: 'GE00BG220000000000002', currency: Currency.USD, currentBalance: 12500, lastSync: new Date().toISOString(), mappedCategoryId: 'rev_projects', isAutoSync: true },
-  { id: 'ba_3', accountName: 'Unmapped Incoming', bankName: 'Liberty Bank', iban: 'GE00LB330000000000003', currency: Currency.GEL, currentBalance: 5600, lastSync: new Date().toISOString(), isAutoSync: true },
-  { id: 'ba_4', accountName: 'Petty Cash', bankName: 'Salaro', iban: 'CASH', currency: Currency.GEL, currentBalance: 1200, lastSync: new Date().toISOString(), isAutoSync: false }
+  { id: 'ba_1', accountName: 'Main Operational', bankName: 'TBC Bank', iban: 'GE00TB110000000000001', currency: Currency.GEL, currentBalance: 0, lastSync: new Date().toISOString(), mappedCategoryId: 'rev_service', isAutoSync: true },
+  { id: 'ba_2', accountName: 'USD Reserve', bankName: 'Bank of Georgia', iban: 'GE00BG220000000000002', currency: Currency.USD, currentBalance: 0, lastSync: new Date().toISOString(), mappedCategoryId: 'rev_projects', isAutoSync: true },
+  { id: 'ba_3', accountName: 'Unmapped Incoming', bankName: 'Liberty Bank', iban: 'GE00LB330000000000003', currency: Currency.GEL, currentBalance: 0, lastSync: new Date().toISOString(), isAutoSync: true },
+  { id: 'ba_4', accountName: 'Petty Cash', bankName: 'Salaro', iban: 'CASH', currency: Currency.GEL, currentBalance: 0, lastSync: new Date().toISOString(), isAutoSync: false }
 ];
 
 REVENUE_CATEGORIES = [
-  { id: 'rev_projects', name: 'პროექტები', description: 'ახალი ლიფტების მონტაჟი', plannedAmount: 50000, actualAmount: 52500 },
-  { id: 'rev_service', name: 'სერვისი', description: 'ყოველთვიური მომსახურება', plannedAmount: 30000, actualAmount: 29800 },
-  { id: 'rev_parts', name: 'ნაწილები', description: 'სათადარიგო ნაწილების რეალიზაცია', plannedAmount: 15000, actualAmount: 17300 },
-  { id: 'rev_other', name: 'სხვა', description: 'სხვა შემოსავლები', plannedAmount: 5000, actualAmount: 1200 },
+  { id: 'rev_projects', name: 'პროექტები', description: 'ახალი ლიფტების მონტაჟი', plannedAmount: 50000, actualAmount: 0 },
+  { id: 'rev_service', name: 'სერვისი', description: 'ყოველთვიური მომსახურება', plannedAmount: 30000, actualAmount: 0 },
+  { id: 'rev_parts', name: 'ნაწილები', description: 'სათადარიგო ნაწილების რეალიზაცია', plannedAmount: 15000, actualAmount: 0 },
+  { id: 'rev_other', name: 'სხვა', description: 'სხვა შემოსავლები', plannedAmount: 5000, actualAmount: 0 },
 ];
 
 try {
@@ -568,50 +538,7 @@ export const updateBudgetAnalysisComment = async (fundId: string, comment: strin
 
 
 // PROMPT 6.7-002: Project Revenue Data (Persisted)
-MOCK_PROJECTS = [
-  {
-    id: 'proj_1', clientName: 'm2', contractDate: '2026-02-15T12:00:00.000Z', durationInWeeks: 26, contractNumber: 'C-001',
-    productType: 'ლიფტი', brand: 'Schindler', product: 'Model 5500', unit: 'ცალი', numberOfFloors: 16, quantity: 2, value: 150000,
-    currency: Currency.EUR, totalReceived: 50000,
-    tranches: [
-      { id: 't1', percentage: 30, month: 2, year: 2026 }, // March
-      { id: 't2', percentage: 30, month: 5, year: 2026 }, // June
-      { id: 't3', percentage: 40, month: 8, year: 2026 }, // September
-    ],
-    priceAnalysisUnitPrice: 150000,
-    priceAnalysisFloorPrice: 12500,
-    priceAnalysisWeeklyPrice: 2885,
-    priceAnalysisMonthlyPrice: 12500,
-    status: 'active',
-  },
-  {
-    id: 'proj_2', clientName: 'Archi', contractDate: '2026-04-01T12:00:00.000Z', durationInWeeks: 12, contractNumber: 'C-002',
-    productType: 'ესკალატორი', brand: 'Kone', product: 'TravelMaster 110', unit: 'ცალი', numberOfFloors: 2, quantity: 1, value: 250000,
-    currency: Currency.USD, totalReceived: 100000,
-    tranches: [
-      { id: 't1', percentage: 50, month: 3, year: 2026 }, // April
-      { id: 't2', percentage: 50, month: 7, year: 2026 }, // August
-    ],
-    priceAnalysisUnitPrice: 250000,
-    priceAnalysisFloorPrice: 20833,
-    priceAnalysisWeeklyPrice: 4808,
-    priceAnalysisMonthlyPrice: 20833,
-    status: 'active',
-  },
-  {
-    id: 'proj_3', clientName: 'Anagi', contractDate: '2026-01-20T12:00:00.000Z', durationInWeeks: 52, contractNumber: 'C-003',
-    productType: 'ლიფტი', brand: 'Otis', product: 'Gen2', unit: 'ცალი', numberOfFloors: 22, quantity: 4, value: 450000,
-    currency: Currency.GEL, totalReceived: 450000,
-    tranches: [
-        { id: 't1', percentage: 100, month: 0, year: 2026 }, // Jan
-    ],
-    priceAnalysisUnitPrice: 450000,
-    priceAnalysisFloorPrice: 37500,
-    priceAnalysisWeeklyPrice: 8654,
-    priceAnalysisMonthlyPrice: 37500,
-    status: 'active',
-  }
-];
+MOCK_PROJECTS = [];
 
 try {
     const sProjects = localStorage.getItem('finboard_projects');
@@ -647,25 +574,7 @@ export const terminateProject = async (projectId: string, terminationDate: strin
 
 
 // PROMPT 6.8-001: Service Revenue Data (Persisted)
-MOCK_SERVICES = [
-  {
-    id: 'serv_1', clientName: 'Axis', contractDate: '2026-03-10T12:00:00.000Z', durationInWeeks: 52, contractNumber: 'S-SERV-01',
-    productType: 'მომსახურება', brand: 'Generic', product: 'Full Service Package', unit: 'თვე', quantity: 12, value: 24000,
-    currency: Currency.GEL, floorsOrStops: 20, totalReceived: 10000,
-    tranches: [
-      { id: 'st1', percentage: 50, month: 2, year: 2026 },
-      { id: 'st2', percentage: 50, month: 8, year: 2026 },
-    ],
-    status: 'active',
-  },
-  {
-    id: 'serv_2', clientName: 'Domus', contractDate: '2026-05-20T12:00:00.000Z', durationInWeeks: 52, contractNumber: 'S-SERV-02',
-    productType: 'მომსახურება', brand: 'Generic', product: 'Basic Maintenance', unit: 'თვე', quantity: 12, value: 18000,
-    currency: Currency.GEL, floorsOrStops: 15, totalReceived: 18000,
-    tranches: [ { id: 'st3', percentage: 100, month: 4, year: 2026 } ],
-    status: 'active',
-  },
-];
+MOCK_SERVICES = [];
 
 try {
     const sServices = localStorage.getItem('finboard_services');
@@ -700,22 +609,7 @@ export const terminateService = async (serviceId: string, terminationDate: strin
 };
 
 // PROMPT 6.8-002: Parts Revenue Data (Persisted)
-MOCK_PARTS = [
-  {
-    id: 'part_1', clientName: 'Redco', contractDate: '2026-02-01T12:00:00.000Z', durationInWeeks: 2, contractNumber: 'P-001-RD',
-    productType: 'ნაწილი', brand: 'Otis', product: 'Drive Unit GEN2', unit: 'ცალი', quantity: 1, value: 15000,
-    currency: Currency.EUR, floorsOrStops: 0, totalReceived: 15000,
-    tranches: [ { id: 'pt1', percentage: 100, month: 1, year: 2026 } ],
-    status: 'active',
-  },
-  {
-    id: 'part_2', clientName: 'BP', contractDate: '2026-04-15T12:00:00.000Z', durationInWeeks: 4, contractNumber: 'P-002-BP',
-    productType: 'ნაწილი', brand: 'Schindler', product: 'Door Control Board', unit: 'ცალი', quantity: 5, value: 7500,
-    currency: Currency.USD, floorsOrStops: 0, totalReceived: 0,
-    tranches: [ { id: 'pt2', percentage: 100, month: 4, year: 2026 } ],
-    status: 'active',
-  },
-];
+MOCK_PARTS = [];
 
 try {
     const sParts = localStorage.getItem('finboard_parts');
@@ -751,69 +645,6 @@ export const terminatePart = async (partId: string, terminationDate: string, ter
 };
 
 
-// PROMPT 6.2-006: Test data generator for variance analysis
-export const generateVarianceStressData = async () => {
-    const generateVarianceMonthlyData = (annualAmount: number, scenario: 'over' | 'under' | 'on') => {
-        const monthlyData = [];
-        for (let i = 0; i < 12; i++) {
-            const monthPlan = annualAmount / 12;
-            let factVariance = 1.0;
-            if (scenario === 'over') {
-                factVariance = 1.1 + Math.random() * 0.4; // 110% - 150%
-            } else if (scenario === 'under') {
-                factVariance = 0.5 + Math.random() * 0.4; // 50% - 90%
-            }
-            monthlyData.push({
-                plan: Math.round(monthPlan),
-                fact: Math.round(monthPlan * factVariance),
-            });
-        }
-        return monthlyData;
-    };
-
-    const allItems = [
-        ...REVENUE_CATEGORIES.map(r => ({ ...r, type: 'revenue', category: 'Revenues' })),
-        ...EXPENSE_FUNDS.map(f => ({ ...f, type: 'expense', plannedAmount: 0 }))
-    ];
-    
-    const stressData = allItems.map((item) => {
-        const plannedAmount = item.plannedAmount || (10000 + Math.random() * 40000);
-        let monthlyData;
-
-        if (item.type === 'expense') {
-            const expenseIndex = EXPENSE_FUNDS.findIndex(f => f.id === item.id);
-            if (expenseIndex >= 0 && expenseIndex < 10) { // First 10 expenses are over budget
-                monthlyData = generateVarianceMonthlyData(plannedAmount, 'over');
-            } else { // Rest are under budget
-                monthlyData = generateVarianceMonthlyData(plannedAmount, 'under');
-            }
-        } else { // revenue
-             monthlyData = generateVarianceMonthlyData(plannedAmount, 'on');
-        }
-
-        const actualAmount = monthlyData.reduce((sum, m) => sum + m.fact, 0);
-
-        return {
-            ...item,
-            plannedAmount,
-            actualAmount,
-            monthlyData
-        };
-    });
-
-    budgetOverrideData = stressData;
-};
-
-const generateMonthlyData = (annualAmount: number) => {
-  const monthlyData = [];
-  for (let i = 0; i < 12; i++) {
-    const monthPlan = annualAmount / 12;
-    const factVariance = 0.7 + Math.random() * 0.6; // 70% to 130% of plan
-    monthlyData.push({ plan: Math.round(monthPlan), fact: Math.round(monthPlan * factVariance) });
-  }
-  return monthlyData;
-};
-
 const generateZeroBasedMonthlyData = () => Array(12).fill({ plan: 0, fact: 0 });
 
 export const getAnnualBudget = async (year: number) => {
@@ -824,32 +655,21 @@ export const getAnnualBudget = async (year: number) => {
     ...EXPENSE_FUNDS.map(f => ({ ...f, type: 'expense', plannedAmount: 0 }))
   ];
   
-  const currentYear = new Date().getFullYear() + 1; // App logic uses 2026 as current year
+  return allItems.map(item => {
+    const plannedAmount = ANNUAL_BUDGETS[year]?.[item.id] || 0;
+    const monthlyData = generateZeroBasedMonthlyData().map((m, i) => ({ plan: (plannedAmount / 12), fact: 0 }));
+    
+    // Apply actuals
+    if (CURRENT_YEAR_ACTUALS[item.id]) {
+      CURRENT_YEAR_ACTUALS[item.id].forEach((actual, index) => {
+        if (monthlyData[index]) monthlyData[index].fact = actual;
+      });
+    }
 
-  if (year === currentYear) {
-    return allItems.map(item => {
-      const plannedAmount = ANNUAL_BUDGETS[year]?.[item.id] || 0;
-      const monthlyData = generateZeroBasedMonthlyData().map((m, i) => ({ plan: (plannedAmount / 12), fact: 0 }));
-      
-      // PROMPT 6.2-008: Apply actuals from stress test
-      if (CURRENT_YEAR_ACTUALS[item.id]) {
-        CURRENT_YEAR_ACTUALS[item.id].forEach((actual, index) => {
-          if (monthlyData[index]) monthlyData[index].fact = actual;
-        });
-      }
+    const actualAmount = monthlyData.reduce((sum, m) => sum + m.fact, 0);
 
-      const actualAmount = monthlyData.reduce((sum, m) => sum + m.fact, 0);
-
-      return { ...item, plannedAmount, actualAmount, monthlyData };
-    });
-  } else {
-    return allItems.map(item => {
-      const plannedAmount = ANNUAL_BUDGETS[year]?.[item.id] || item.plannedAmount || (Math.random() * 50000);
-      const monthlyData = generateMonthlyData(plannedAmount);
-      const actualAmount = monthlyData.reduce((sum, m) => sum + m.fact, 0);
-      return { ...item, plannedAmount, actualAmount, monthlyData };
-    });
-  }
+    return { ...item, plannedAmount, actualAmount, monthlyData };
+  });
 };
 
 
@@ -1017,17 +837,10 @@ export const getExpenseFunds = async (): Promise<ExpenseFund[]> => {
 export const syncBankAccounts = async (): Promise<BankAccount[]> => {
     BANK_ACCOUNTS.forEach(acc => {
         if(acc.isAutoSync) {
-            acc.currentBalance += Math.random() * 2000 - 800; // Simulate some activity
             acc.lastSync = new Date().toISOString();
         }
     });
-    // PROMPT 6.3-015: Simulate sync for rates and inflation
-    MOCK_RATES.USD = 2.65 + Math.random() * 0.1;
-    MOCK_RATES.EUR = 2.85 + Math.random() * 0.1;
-    MOCK_INFLATION_RATE = 3.0 + Math.random() * 0.5;
     safeEmit('update_state', { key: 'bankAccounts', value: BANK_ACCOUNTS });
-    safeEmit('update_state', { key: 'mockRates', value: MOCK_RATES });
-    safeEmit('update_state', { key: 'mockInflation', value: MOCK_INFLATION_RATE });
     return [...BANK_ACCOUNTS];
 };
 
@@ -1196,11 +1009,10 @@ const EXEMPT_ROLES = [UserRole.FIN_DIRECTOR, UserRole.CEO, UserRole.FOUNDER];
 const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole): Date => {
   const date = new Date(submissionDate);
   
-  // Target: Wednesday (3) at 17:00
-  const targetDay = 3; // Wednesday
+  // Target: Wednesday (3)
+  const targetDay = 3; 
   const targetHour = 17;
   
-  // Find the Wednesday of the current week
   const currentDay = date.getDay();
   const diff = targetDay - currentDay;
   
@@ -1208,11 +1020,24 @@ const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole):
   thisWeekWednesday.setDate(date.getDate() + diff);
   thisWeekWednesday.setHours(targetHour, 0, 0, 0);
   
+  // If today is past Wednesday, thisWeekWednesday is in the past.
+  // The "current week's council" for Thursday/Friday/Saturday is actually NEXT Wednesday.
+  // For Sunday/Monday/Tuesday, "current week's council" is THIS Wednesday.
+  
   if (EXEMPT_ROLES.includes(userRole)) {
+    // Exempt roles can submit up to Wednesday 23:59 for this week's council
+    const thisWeekWednesdayEnd = new Date(thisWeekWednesday);
+    thisWeekWednesdayEnd.setHours(23, 59, 59, 999);
+    
+    if (date > thisWeekWednesdayEnd) {
+      const nextWeekWednesday = new Date(thisWeekWednesday);
+      nextWeekWednesday.setDate(thisWeekWednesday.getDate() + 7);
+      return nextWeekWednesday;
+    }
     return thisWeekWednesday;
   }
   
-  // If the submission is after this week's Wednesday 17:00, it goes to next week
+  // Normal roles: cutoff is Wednesday 17:00
   if (date > thisWeekWednesday) {
     const nextWeekWednesday = new Date(thisWeekWednesday);
     nextWeekWednesday.setDate(thisWeekWednesday.getDate() + 7);
@@ -1388,17 +1213,12 @@ export const resubmitRequest = async (requestId: string, updates: Partial<Expens
 
 // --- DATA FOR FINANCIAL COUNCIL ---
 export const getDirectorBoardRequests = async (): Promise<ExpenseRequest[]> => {
-  const activeSession = await getBoardSession();
   const relevantStatuses = [
     RequestStatus.COUNCIL_REVIEW,
     RequestStatus.FD_APPROVED,
   ];
   
-  let filtered = REQUESTS.filter(r => relevantStatuses.includes(r.status));
-  
-  if (activeSession) {
-    filtered = filtered.filter(r => r.boardDate === activeSession.weekDate);
-  }
+  const filtered = REQUESTS.filter(r => relevantStatuses.includes(r.status));
   
   return filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 };
@@ -1474,14 +1294,7 @@ export const getArchivedBoardSessions = async (): Promise<BoardSession[]> => {
 };
 
 export const getFdFinalRequests = async (): Promise<ExpenseRequest[]> => {
-    const activeSession = await getBoardSession();
-    let filtered = REQUESTS.filter(r => r.status === RequestStatus.FD_APPROVED);
-    
-    if (activeSession) {
-        filtered = filtered.filter(r => r.boardDate === activeSession.weekDate);
-    }
-    
-    return filtered;
+    return REQUESTS.filter(r => r.status === RequestStatus.FD_APPROVED);
 };
 
 export const getDispatchedRequests = async (): Promise<ExpenseRequest[]> => {
@@ -1518,549 +1331,115 @@ export const deleteUserMock = async (id: string) => {
     syncUsers();
 };
 
-// --- TEST & AUTOMATION ---
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// --- DATABASE BACKUP & RESTORE ---
 
-// PROMPT 7.4-006: System Stress Test
-export const runSystemStressTestP7_4_006 = async (
-  log: (msg: string) => void,
-  setProgress: (p: { current: number; total: number; message: string }) => void
-): Promise<{
-  archiveWeeksCreated: number;
-  liveRequestsCreated: number;
-  totalLiveSpend: number;
-}> => {
-  log("P7.4-006: COMMAND: INITIATE_SYSTEM_STRESS_TEST");
-  setProgress({ current: 0, total: 100, message: "Initializing..." });
-  
-  await cleanTestData();
-  log("  [OK] Cleared all previous test data.");
-  setProgress({ current: 5, total: 100, message: "Cleared test data." });
-
-  const emp = USERS['u_comm_emp_1']; 
-  let archiveWeeksCreated = 0;
-  
-  // PHASE 1: HISTORICAL ARCHIVE CREATION
-  log("PHASE 1: Creating temporary data-store 'TEST_ARCHIVE'...");
-  setProgress({ current: 10, total: 100, message: "Generating archive week 1..." });
-  
-  const baseDate = new Date('2026-02-19T12:00:00.000Z'); // A Thursday in Feb 2026
-
-  for (let week = 1; week <= 3; week++) {
-    const numRequests = 5 + Math.floor(Math.random() * 5); // 5-9 requests per week
-    const weekDate = new Date(baseDate);
-    weekDate.setDate(baseDate.getDate() - (week * 7));
-    
-    for (let i = 0; i < numRequests; i++) {
-        const submissionDate = new Date(weekDate);
-        submissionDate.setDate(weekDate.getDate() - (Math.random() * 6));
-
-        const randomFundIndex = Math.floor(Math.random() * EXPENSE_FUNDS.length);
-        const assignedFundId = EXPENSE_FUNDS[randomFundIndex].id;
-
-        await submitRequest({
-            itemName: `TEST_ARCHIVE W-${week} Req #${i + 1}`,
-            totalAmount: 200 + Math.random() * 1800,
-            status: RequestStatus.PAID,
-            isTestData: true,
-            createdAt: submissionDate.toISOString(),
-            boardDate: weekDate.toISOString(), 
-            assignedFundId: assignedFundId,
-        }, emp);
-    }
-    log(`  [OK] Generated ${numRequests} requests for Archive Week ${week}.`);
-    archiveWeeksCreated++;
-    setProgress({ current: 10 + (week * 10), total: 100, message: `Generated archive week ${week}...` });
-    await delay(50);
-  }
-  log("PHASE 1: COMPLETE. 3 archive snapshots created.");
-
-  // PHASE 2: 50 REQUESTS INJECTION
-  let liveRequestsCreated = 0;
-  let totalLiveSpend = 0;
-  log("PHASE 2: Injecting 50 new requests for Feb 2026...");
-  setProgress({ current: 40, total: 100, message: "Injecting 50 live requests..." });
-
-  const currentBoardDate = baseDate.toISOString();
-
-  for (let i = 1; i <= 50; i++) {
-    const randomFundIndex = Math.floor(Math.random() * EXPENSE_FUNDS.length);
-    const assignedFundId = EXPENSE_FUNDS[randomFundIndex].id;
-    const amount = 50 + Math.random() * 950;
-    
-    const newReq: ExpenseRequest = {
-        id: `TEST_${i.toString().padStart(3, '0')}`,
-        userId: emp.id,
-        requesterName: emp.name,
-        department: emp.department,
-        managerId: emp.managerId || 'u_ceo',
-        date: new Date().toISOString().split('T')[0],
-        category: 'Test Data',
-        itemName: `P7.4-006 Live Req #${i}`,
-        quantity: 1,
-        unitPrice: amount,
-        currency: Currency.GEL,
-        totalAmount: amount,
-        description: 'Automated test request for live bridge sync.',
-        revenuePotential: '',
-        priority: Priority.MEDIUM,
-        alternativesChecked: true,
-        selectedOptionReason: 'Test data',
-        status: RequestStatus.PAID, // 'დასრულებული'
-        createdAt: new Date().toISOString(),
-        boardDate: currentBoardDate, // Feb 2026
-        isTestData: true,
-        assignedFundId: assignedFundId,
-    };
-
-    REQUESTS.push(newReq);
-    liveRequestsCreated++;
-    totalLiveSpend += amount;
-
-    if (i % 5 === 0) {
-      setProgress({ current: 40 + (i / 50 * 50), total: 100, message: `Injected ${i}/50 requests...` });
-      await delay(20);
-    }
-  }
-  syncRequests();
-  log(`  [OK] Generated and injected 50 requests with IDs TEST_001 to TEST_050.`);
-  log("PHASE 2: COMPLETE.");
-
-  // PHASE 3: LIVE BRIDGE SYNC
-  log("PHASE 3: LIVE BRIDGE SYNC verification...");
-  log("  [INFO] 50 'PAID' requests have been added to the main data store.");
-  log("  [INFO] The 'Financial Board Matrix' will now reflect this spend in the 'Fact (₾)' column upon refresh.");
-  log("  [OK] Bridge sync complete.");
-  setProgress({ current: 95, total: 100, message: "Syncing with matrix..." });
-
-  log("P7.4-006: TEST COMPLETE.");
-  setProgress({ current: 100, total: 100, message: "Test Complete!" });
-
-  return {
-      archiveWeeksCreated,
-      liveRequestsCreated,
-      totalLiveSpend,
+export const exportDatabase = () => {
+  const data = {
+    requests: REQUESTS,
+    boardSessions: BOARD_SESSIONS,
+    hiddenFunds: HIDDEN_FUNDS,
+    dispatchedDirectives: DISPATCHED_DIRECTIVES,
+    invoices: INVOICES,
+    cwInflow: CURRENT_WEEK_CASH_INFLOW,
+    archivedInflow: ARCHIVED_CASH_INFLOW,
+    debtors: DEBTORS,
+    creditors: CREDITORS,
+    bankAccounts: BANK_ACCOUNTS,
+    revenueCategories: REVENUE_CATEGORIES,
+    mockRates: MOCK_RATES,
+    mockInflation: MOCK_INFLATION_RATE,
+    annualBudgets: ANNUAL_BUDGETS,
+    currentYearActuals: CURRENT_YEAR_ACTUALS,
+    budgetAnalysisComments: BUDGET_ANALYSIS_COMMENTS,
+    projects: MOCK_PROJECTS,
+    services: MOCK_SERVICES,
+    parts: MOCK_PARTS,
+    users: USERS,
   };
+  return JSON.stringify(data, null, 2);
 };
 
-// PROMPT 6.2-016: Validation Stress Test (P429)
-export const runValidationStressTestP429 = async (log: (msg: string) => void) => {
-    log("P429: Initializing Form Validation Stress Test...");
+export const importDatabase = async (jsonString: string) => {
+  try {
+    const data = JSON.parse(jsonString);
     
-    log("  - Simulating submission with a missing 'Priority' field...");
-    const incompleteForm = {
-        itemName: 'Test Item',
-        totalAmount: 100,
-        revenuePotential: 'High',
-        selectedOptionReason: 'Best price',
-    };
-    log("  - EXPECTATION: Submission blocked by frontend validation.");
-    log("  - RESULT: [BLOCKED] UI should highlight missing fields in red.");
+    // Update local variables
+    if (data.requests) REQUESTS = data.requests;
+    if (data.boardSessions) BOARD_SESSIONS = data.boardSessions;
+    if (data.hiddenFunds) HIDDEN_FUNDS = data.hiddenFunds;
+    if (data.dispatchedDirectives) DISPATCHED_DIRECTIVES = data.dispatchedDirectives;
+    if (data.invoices) INVOICES = data.invoices;
+    if (data.cwInflow) CURRENT_WEEK_CASH_INFLOW = data.cwInflow;
+    if (data.archivedInflow) ARCHIVED_CASH_INFLOW = data.archivedInflow;
+    if (data.debtors) DEBTORS = data.debtors;
+    if (data.creditors) CREDITORS = data.creditors;
+    if (data.bankAccounts) BANK_ACCOUNTS = data.bankAccounts;
+    if (data.revenueCategories) REVENUE_CATEGORIES = data.revenueCategories;
+    if (data.mockRates) MOCK_RATES = data.mockRates;
+    if (data.mockInflation) MOCK_INFLATION_RATE = data.mockInflation;
+    if (data.annualBudgets) ANNUAL_BUDGETS = data.annualBudgets;
+    if (data.currentYearActuals) CURRENT_YEAR_ACTUALS = data.currentYearActuals;
+    if (data.budgetAnalysisComments) BUDGET_ANALYSIS_COMMENTS = data.budgetAnalysisComments;
+    if (data.projects) MOCK_PROJECTS = data.projects;
+    if (data.services) MOCK_SERVICES = data.services;
+    if (data.parts) MOCK_PARTS = data.parts;
+    if (data.users) USERS = data.users;
 
-    await delay(500);
+    // Sync to localStorage
+    localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
+    localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS));
+    localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS));
+    localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES));
+    localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES));
+    localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW));
+    localStorage.setItem('finboard_archived_inflow', JSON.stringify(ARCHIVED_CASH_INFLOW));
+    localStorage.setItem('finboard_debtors', JSON.stringify(DEBTORS));
+    localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS));
+    localStorage.setItem('finboard_bank_accounts', JSON.stringify(BANK_ACCOUNTS));
+    localStorage.setItem('finboard_revenue_categories', JSON.stringify(REVENUE_CATEGORIES));
+    localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES));
+    localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE));
+    localStorage.setItem('finboard_annual_budgets', JSON.stringify(ANNUAL_BUDGETS));
+    localStorage.setItem('finboard_current_year_actuals', JSON.stringify(CURRENT_YEAR_ACTUALS));
+    localStorage.setItem('finboard_budget_comments', JSON.stringify(BUDGET_ANALYSIS_COMMENTS));
+    localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS));
+    localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES));
+    localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS));
+    localStorage.setItem('finboard_users', JSON.stringify(USERS));
 
-    log("  - Simulating submission with all fields filled...");
-    const completeForm = {
-        ...incompleteForm,
-        priority: Priority.HIGH
-    };
-    log("  - EXPECTATION: Submission is successful.");
-    log("  - RESULT: [SUCCESS] Form can be submitted.");
-
-    log("P429 Test Complete. Frontend validation logic is active.");
-};
-
-export const cleanTestData = async () => {
-  REQUESTS = REQUESTS.filter(r => !r.isTestData);
-  syncRequests();
-}
-
-// PROMPT 6.2-015: Full Audit & Repair (P427)
-export const runFullAuditAndRepairP427 = async (log: (msg: string) => void) => {
-    log("P427: Initializing Full System Audit & Repair...");
-    await cleanTestData();
-    log("  - Cleared all previous test data.");
-    
-    const emp = USERS['u_comm_emp_1'];
-    let cfoTotal = 0;
-    let ceoTotal = 0;
-
-    log("  - Generating 10 requests for CFO Review (Step 3)...");
-    for (let i = 0; i < 10; i++) {
-        const amount = 500 + Math.random() * 1500;
-        cfoTotal += amount;
-        await submitRequest({
-            itemName: `P427 CFO Audit #${i + 1}`,
-            totalAmount: amount,
-            isTestData: true,
-            status: RequestStatus.COUNCIL_REVIEW,
-        }, emp);
-    }
-    log(`  - CFO queue populated. Expected total: ${cfoTotal.toFixed(2)} GEL.`);
-
-    log("  - Generating 10 requests for CEO/Final Approval (Step 11)...");
-    for (let i = 0; i < 10; i++) {
-        const amount = 2000 + Math.random() * 3000;
-        ceoTotal += amount;
-        await submitRequest({
-            itemName: `P427 CEO Audit #${i + 1}`,
-            totalAmount: amount,
-            isTestData: true,
-            status: RequestStatus.FD_APPROVED,
-            assignedFundId: 'fund_direct_project'
-        }, emp);
-    }
-    log(`  - CEO queue populated. Expected total: ${ceoTotal.toFixed(2)} GEL.`);
-    
-    log("P427 Test Complete. System state has been restored.");
-    log("VALIDATION: 100% SUCCESS. Check 'Review Requests' and 'Financial Council (Step 11)' for populated data.");
-};
-
-// PROMPT 6.2-014: Master Recovery Button (P426)
-export const runSystemRestoreAndRemapP426 = async (log: (msg: string) => void) => {
-  log("P426: Initializing System Restore & Force Re-map...");
-  const all = await getAllRequests();
-  
-  const finalOrReturnedStatuses = [
-    RequestStatus.PAID,
-    RequestStatus.REJECTED,
-    RequestStatus.RETURNED_TO_SENDER,
-    RequestStatus.RETURNED_TO_MANAGER,
-    RequestStatus.COUNCIL_REVIEW, 
-  ];
-
-  const requestsToRemap = all.filter(r => !finalOrReturnedStatuses.includes(r.status));
-  
-  if (requestsToRemap.length === 0) {
-    log("No orphan requests found to re-map. System appears aligned.");
-    return;
+    window.dispatchEvent(new Event('finboard_sync'));
+    return true;
+  } catch (e) {
+    console.error('Failed to import database:', e);
+    return false;
   }
+};
+export const getInvoicesForAccountant = async (): Promise<Invoice[]> => {
+  return INVOICES.filter(inv => inv.status === InvoiceStatus.PENDING_ACCOUNTANT)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+};
 
-  log(`Found ${requestsToRemap.length} orphan requests to re-map to the review queue...`);
-  for (const req of requestsToRemap) {
-    await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, 'system_restore_p426');
-    log(`  - Re-mapped request ${req.id.substring(0, 8)}... from status '${req.status}'`);
-    await delay(50);
+export const getGeneratedInvoices = async (): Promise<Invoice[]> => {
+  return INVOICES.filter(inv => inv.status === InvoiceStatus.GENERATED || inv.status === InvoiceStatus.COMPLETED)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+};
+
+export const updateInvoice = async (id: string, updates: Partial<Invoice>): Promise<void> => {
+  const index = INVOICES.findIndex(inv => inv.id === id);
+  if (index !== -1) {
+    INVOICES[index] = { ...INVOICES[index], ...updates };
+    syncInvoices();
   }
-  
-  log("P426 Test Complete. All active requests have been re-mapped to the Financial Council. Please check the 'Review Requests' page.");
 };
 
-// Helper for P425
-const getSimulatedDate = (weekOffset: number, isLate: boolean = false): Date => {
-    const now = new Date(); 
-    const targetDay = 3; // Wednesday
-    const targetHour = 17;
-    
-    const dayOfWeek = now.getDay(); 
-    const diff = targetDay - dayOfWeek;
-    
-    // Target the Wednesday of the specified week offset
-    const targetWednesday = new Date(now);
-    targetWednesday.setDate(now.getDate() + diff - (weekOffset * 7));
-    targetWednesday.setHours(targetHour, 0, 0, 0);
-
-    const submissionDate = new Date(targetWednesday);
-
-    if (isLate) {
-        // After 17:00 on Wednesday
-        submissionDate.setHours(targetHour, 5, 0, 0); // 17:05
-    } else {
-        // Sometime before the deadline in that week
-        const randomDayBefore = Math.floor(Math.random() * 2) + 1; // 1 or 2 days before
-        submissionDate.setDate(submissionDate.getDate() - randomDayBefore);
-        submissionDate.setHours(11, 30, 0, 0); // e.g., 11:30 AM
-    }
-    return submissionDate;
-};
-
-
-// PROMPT 6.3-011: MASTER STRESS TEST (P425) - 50 SCENARIOS & 3-WEEK ARCHIVE
-export const runReviewPageSyncTestP425 = async (log: (msg: string) => void) => {
-    log("P425 STRESS TEST (PROMPT 6.3-011): Initializing 50 scenarios over 3 weeks...");
-    await cleanTestData();
-    log("Cleaned previous test data.");
-
-    const departmentsConfig = [
-        { name: 'Commercial & Marketing', department: 'Commercial', userKey: 'u_comm_dir' },
-        { name: 'Service & Operation', department: 'Technical', userKey: 'u_tech_dir' },
-        { name: 'Procurement & Parts', department: 'Procurement Dept', userKey: 'u_comm_emp_1' },
-        { name: 'Payroll Fund', department: 'Administration', userKey: 'u_admin_mgr' },
-        { name: 'Taxes', department: 'Finance', userKey: 'u_fin' },
-        { name: 'Reserve & Others', department: 'Executive', userKey: 'u_ceo' },
-    ];
-    
-    let lateEntriesCount = 0;
-    const requestsToCreate = [];
-
-    for (let i = 0; i < 50; i++) {
-        const deptConfig = departmentsConfig[i % departmentsConfig.length];
-        const user = USERS[deptConfig.userKey];
-
-        let weekOffset;
-        if (i < 17) weekOffset = 2; // Week 1 (2 weeks ago)
-        else if (i < 34) weekOffset = 1; // Week 2 (1 week ago)
-        else weekOffset = 0; // Week 3 (current week)
-        
-        // Inject 5 late entries
-        const isLate = lateEntriesCount < 5 && i % 10 === 0;
-        if(isLate) lateEntriesCount++;
-
-        const createdAt = getSimulatedDate(weekOffset, isLate);
-
-        let status: RequestStatus;
-        if (i < 35) status = RequestStatus.PAID; // Approved
-        else if (i < 45) status = RequestStatus.REJECTED; // Rejected
-        else status = RequestStatus.COUNCIL_REVIEW; // Pending
-        
-        const randomAmount = 500 + Math.random() * (25000 - 500);
-
-        const requestDetails: Partial<ExpenseRequest> = {
-            department: deptConfig.department,
-            totalAmount: parseFloat(randomAmount.toFixed(2)),
-            itemName: `P425 Scenario #${i + 1} (Week ${3 - weekOffset})`,
-            revenuePotential: 'Generated for P425 Multi-week Stress Test',
-            selectedOptionReason: 'Automated selection for P425 test parameters.',
-            alternativesChecked: true,
-            priority: Priority.MEDIUM,
-            status: status,
-            isTestData: true,
-            createdAt: createdAt.toISOString(), // CRITICAL: Override the creation date
-            // The `boardDate` will be calculated based on this `createdAt`
-            assignedFundId: status === RequestStatus.PAID ? 'fund_direct_project' : undefined,
-        };
-        
-        requestsToCreate.push({ details: requestDetails, user });
-    }
-    
-    log(`Generated 50 request configurations across 3 weeks. Injecting into database...`);
-
-    for(const req of requestsToCreate) {
-        await submitRequest(req.details, req.user);
-    }
-    
-    log(`Successfully injected 50 new test requests.`);
-    log(`- 5 requests were marked as 'late' to test cut-off logic.`);
-    log("P425 STRESS TEST: Complete. Check 'Financial Council' Step 0 (Archive) and Step 13 (Board Closure).");
-};
-
-// PROMPT 6.2-012: CFO Totals & Flow Verification Test (P424)
-export const runCfoTotalsVerificationTestP424 = async (log: (msg: string) => void) => {
-  log("P424: Initializing CFO Totals & Flow Verification...");
-  await cleanTestData();
-  const manager = USERS['u_comm_dir'];
-  let expectedTotal = 0;
-  for (let i = 0; i < 10; i++) {
-    const randomAmount = 1000 + Math.random() * 4000;
-    expectedTotal += randomAmount;
-    const req = await submitRequest({
-      itemName: `P424 CFO Total Test #${i + 1}`,
-      totalAmount: randomAmount,
-      isTestData: true,
-      priority: Priority.MEDIUM,
-      revenuePotential: `P424 Test: Strategic potential for total validation.`,
-      alternativesChecked: true,
-      selectedOptionReason: `P424 Test: Market research complete and documented for readability and tooltip checks. This text can be long to verify wrapping and tooltips.`
-    }, manager);
-    
-    await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, manager.id);
-    log(`[${i+1}/10] Request for ${randomAmount.toFixed(2)} GEL sent to CFO.`);
+export const updateInvoiceStatus = async (id: string, status: InvoiceStatus): Promise<void> => {
+  const index = INVOICES.findIndex(inv => inv.id === id);
+  if (index !== -1) {
+    INVOICES[index] = { ...INVOICES[index], status };
+    syncInvoices();
   }
-  log(`P424 Test Complete. 10 requests sent to CFO.`);
-  log(`VALIDATION: Check 'Pending Sum' widget. Expected Total: ${expectedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/,/g, ' ')} GEL`);
 };
 
-// PROMPT 6.2-011: Emergency CFO Flow Validation Test (P423)
-export const runCfoFlowVerificationTestP423 = async (log: (msg: string) => void) => {
-  log("P423: Initializing CFO Flow Verification...");
-  await cleanTestData();
-  const manager = USERS['u_comm_dir']; // Mid-manager
-  for (let i = 0; i < 5; i++) {
-    const req = await submitRequest({
-      itemName: `P423 CFO Flow Test #${i + 1}`,
-      totalAmount: 1000 + Math.random() * 4000,
-      isTestData: true,
-      priority: Priority.HIGH,
-      revenuePotential: `P423 Test: Strategic potential defined here for validation.`,
-      alternativesChecked: true,
-      selectedOptionReason: `P423 Test: Market research complete and documented.`
-    }, manager);
-    
-    await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, manager.id);
-    log(`[${i+1}/5] Request ${req.id.substring(0,8)}... sent to CFO cabinet.`);
-    await delay(50);
-  }
-  log("P423 Test Complete. 5 requests are now pending in the Financial Council (Step 3). Please verify visibility.");
-};
-
-
-// PROMPT 6.2-010: Workflow Repair Test (P422)
-export const runWorkflowRepairTestP422 = async (log: (msg: string) => void, user: User) => {
-  log("P422: Workflow Repair Test Initialized.");
-};
-
-// PROMPT 7.1-005: REPORT STRESS TEST (P425)
-export const runReportStressTestP425 = async (log: (msg: string) => void) => {
-    log("P425: REPORT AGGREGATION STRESS TEST INITIALIZED.");
-    const allCategories = await getRevenueCategories();
-    const rates = await getCurrencyRates();
-
-    const runAggregation = (accounts: BankAccount[]): Record<string, Record<string, number>> => {
-        const categoryMap = allCategories.reduce((acc, cat) => {
-            acc[cat.id] = cat.name;
-            return acc;
-        }, {} as Record<string, string>);
-
-        const getRate = (currency: Currency) => (currency === 'USD' ? rates.USD : currency === 'EUR' ? rates.EUR : 1);
-        
-        return accounts.reduce((acc, account) => {
-            if (account.mappedCategoryId) {
-                const categoryName = categoryMap[account.mappedCategoryId];
-                if (categoryName) {
-                    const bankName = account.bankName && account.bankName.trim() !== '' ? account.bankName : 'დაუზუსტებელი ბანკი';
-                    if (!acc[categoryName]) acc[categoryName] = {};
-                    if (!acc[categoryName][bankName]) acc[categoryName][bankName] = 0;
-                    acc[categoryName][bankName] += account.currentBalance * getRate(account.currency);
-                }
-            }
-            return acc;
-        }, {} as Record<string, Record<string, number>>);
-    };
-
-    log("  - Setting up 30+ test scenarios...");
-    const testAccounts: BankAccount[] = [
-      // 1-10: Aggregation
-      { id: 't1', bankName: 'TBC Bank', mappedCategoryId: 'rev_projects', currentBalance: 100, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      { id: 't2', bankName: 'TBC Bank', mappedCategoryId: 'rev_projects', currentBalance: 250.50, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      // 11-15: Balance Check
-      { id: 't3', bankName: 'Bank of Georgia', mappedCategoryId: 'rev_service', currentBalance: -50, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      { id: 't4', bankName: 'Bank of Georgia', mappedCategoryId: 'rev_service', currentBalance: 0, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      // 16-20: Concurrency (Multi-Module)
-      { id: 't5', bankName: 'TBC Bank', mappedCategoryId: 'rev_service', currentBalance: 1000, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      { id: 't6', bankName: 'Liberty Bank', mappedCategoryId: 'rev_parts', currentBalance: 500, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      // 21-25: Update (Unmapped)
-      { id: 't7', bankName: 'TBC Bank', mappedCategoryId: undefined, currentBalance: 9999, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      // 26-30: Currency Exchange
-      { id: 't8', bankName: 'TBC Bank', mappedCategoryId: 'rev_projects', currentBalance: 100, currency: Currency.USD, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      { id: 't9', bankName: 'Bank of Georgia', mappedCategoryId: 'rev_service', currentBalance: 200, currency: Currency.EUR, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      // Unspecified Bank Name
-      { id: 't10', bankName: '   ', mappedCategoryId: 'rev_parts', currentBalance: 75, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-      { id: 't11', bankName: (null as any), mappedCategoryId: 'rev_parts', currentBalance: 25, currency: Currency.GEL, isAutoSync: false, accountName: '', iban: '', lastSync: '' },
-    ];
-    log(`  - ${testAccounts.length} virtual accounts created for simulation.`);
-
-    log("  - Calculating expected results manually (source of truth)...");
-    const expected = {
-      'პროექტები': { 'TBC Bank': (100 + 250.50) + (100 * rates.USD) },
-      'სერვისი': { 'Bank of Georgia': -50 + 0 + (200 * rates.EUR), 'TBC Bank': 1000 },
-      'ნაწილები': { 'Liberty Bank': 500, 'დაუზუსტებელი ბანკი': 75 + 25 }
-    };
-    log("  - Expected results calculated.");
-
-    log("  - Running aggregation engine against test data...");
-    const actual = runAggregation(testAccounts);
-    log("  - Engine finished. Comparing results...");
-
-    let pass = true;
-    try {
-        const round = (obj: any) => JSON.parse(JSON.stringify(obj, (_, v) => typeof v === 'number' ? parseFloat(v.toFixed(2)) : v));
-        const expectedRounded = round(expected);
-        const actualRounded = round(actual);
-
-        if (JSON.stringify(expectedRounded) !== JSON.stringify(actualRounded)) {
-            pass = false;
-        }
-    } catch(e: any) {
-        pass = false;
-        log(`COMPARISON ERROR: ${e.message}`);
-    }
-
-    if (pass) {
-        log("  [PASS] Stress Test P425: All scenarios passed. Aggregation logic is correct.");
-    } else {
-        log("  [FAIL] Stress Test P425: Discrepancy found.");
-        log(`    - EXPECTED: ${JSON.stringify(expected)}`);
-        log(`    - GOT: ${JSON.stringify(actual)}`);
-    }
-    log("P425: TEST COMPLETE.");
-};
-
-// --- FIX: ADD MISSING FUNCTIONS ---
-
-export const clearAllRequests = async (): Promise<void> => {
-  REQUESTS = [];
-  syncRequests();
-};
-
-export const generateTestRequests = async (): Promise<void> => {
-    const emp = USERS['u_comm_emp_1'];
-    REQUESTS.push(
-      createNewRequest({ itemName: 'Generated Test 1', totalAmount: 120, isTestData: true }, emp),
-      createNewRequest({ itemName: 'Generated Test 2', totalAmount: 450, isTestData: true }, emp)
-    );
-    syncRequests();
-};
-
-export const createAutomatedTestFlowRequest = async (): Promise<void> => {
-    const emp = USERS['u_comm_emp_1'];
-    REQUESTS.push(
-      createNewRequest({ itemName: 'Automated Flow Request', totalAmount: 999, isTestData: true }, emp)
-    );
-    syncRequests();
-};
-
-export const generateAccountingRequests = async (): Promise<void> => {
-    const director = USERS['u_tech_dir'];
-    REQUESTS.push(
-        createNewRequest({
-            itemName: 'Accounting Queue Item',
-            totalAmount: 888,
-            status: RequestStatus.DISPATCHED_TO_ACCOUNTING,
-            isTestData: true,
-        }, director)
-    );
-    syncRequests();
-};
-export const generateAccountingReadyRequests = generateAccountingRequests;
-
-
-export const clearActiveBoardData = async (): Promise<void> => {
-    const statusesToClear = [RequestStatus.COUNCIL_REVIEW, RequestStatus.FD_APPROVED, RequestStatus.FD_FINAL_CONFIRM];
-    REQUESTS = REQUESTS.filter(r => !statusesToClear.includes(r.status));
-    syncRequests();
-};
-
-export const generatePendingManagerRequests = async (): Promise<void> => {
-    const emp = USERS['u_comm_emp_4'];
-    for(let i=0; i<4; i++) {
-        REQUESTS.push(
-            createNewRequest({
-                itemName: `Manager Queue Item ${i+1}`,
-                totalAmount: 150 + i*50,
-                status: RequestStatus.WAITING_DEPT_APPROVAL,
-                isTestData: true,
-            }, emp)
-        );
-    }
-    syncRequests();
-};
-
-export const generatePendingDirectorRequests = async (): Promise<void> => {
-    const manager = USERS['u_comm_dir'];
-    REQUESTS.push(
-        createNewRequest({
-            itemName: 'Director Queue Item',
-            totalAmount: 1500,
-            status: RequestStatus.COUNCIL_REVIEW,
-            isTestData: true,
-        }, manager)
-    );
-    syncRequests();
-};
-
-export const generateTechAdminRequests = async (): Promise<void> => {
-    // Empty function to satisfy import
-};
 
 // PROMPT 6.3-007: Update AI summary generation
 export const generateAIReportSummary = async (data: MasterReportData): Promise<string> => {
@@ -2200,52 +1579,6 @@ export const getProformaInvoicesForUser = async (userId: string): Promise<Invoic
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
-export const getInvoicesForAccountant = async (): Promise<Invoice[]> => {
-  return INVOICES.filter(inv => inv.status === InvoiceStatus.PENDING_ACCOUNTANT)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-};
-
-export const getGeneratedInvoices = async (): Promise<Invoice[]> => {
-  return INVOICES.filter(inv => inv.status === InvoiceStatus.GENERATED || inv.status === InvoiceStatus.COMPLETED)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-};
-
-export const updateInvoice = async (id: string, updates: Partial<Invoice>): Promise<void> => {
-  const index = INVOICES.findIndex(inv => inv.id === id);
-  if (index !== -1) {
-    INVOICES[index] = { ...INVOICES[index], ...updates };
-    syncInvoices();
-  }
-};
-
-export const updateInvoiceStatus = async (id: string, status: InvoiceStatus): Promise<void> => {
-  const index = INVOICES.findIndex(inv => inv.id === id);
-  if (index !== -1) {
-    INVOICES[index] = { ...INVOICES[index], status };
-    syncInvoices();
-  }
-};
-
-
-// Dummy functions to satisfy other TestCenter imports, not required for main error fix
-export const getRequestById = async (id: string) => REQUESTS.find(r => r.id === id);
-export const deleteRequest = async (id: string) => { REQUESTS = REQUESTS.filter(r => r.id !== id); syncRequests(); };
-export const runFullHierarchyTest = async (log: (msg: string) => void) => { log("Test not implemented."); };
-export const runFullLoopStressTest = async (log: (msg: string) => void) => { log("Test not implemented."); };
-export const runAccountingStressTest = async (log: (msg: string) => void) => { log("Test not implemented."); };
-export const runRevenueAndPaymentTest = async (log: (msg: string) => void) => { log("Test not implemented."); };
-export const generateScenariosPrompt413 = async (log: (msg: string) => void) => { log("Test not implemented."); };
-export const generateFinancialStressData = async () => {};
-export const clearFinancialTestData = async () => {};
-export const runCrossManagerPrivacyCheck = async () => {};
-export const runCEOConsolidatedCheck = async () => {};
-export const runStrategicFieldsValidationTest = async (log: (msg: string) => void) => { log("Test not implemented."); };
-export const runFullE2EJourneysTest = async (log: (msg: string, success: boolean) => void) => { log("Test not implemented.", false); };
-export const generateIncrementalBaseData = async () => {};
-export const generateIncrementalMgmtData = async () => {};
-export const generateIncrementalPrivacyData = async () => {};
-export const runFullLifecycleStressTestP420 = async (log: (msg: string, current: number, total: number) => void) => { log("Test not implemented.", 0, 0); };
-
 // PROMPT 6.2-009: Reset Data
 export const resetAllDataToProduction = async () => {
   localStorage.clear();
@@ -2342,7 +1675,7 @@ const initSupabaseSync = () => {
   }
 
   if (!url.startsWith('https://')) {
-    console.error('Supabase Realtime error: VITE_SUPABASE_URL must start with https://');
+    console.warn('Supabase Realtime error: VITE_SUPABASE_URL must start with https://');
     return;
   }
 
@@ -2394,9 +1727,9 @@ const initSupabaseSync = () => {
           payload: {}
         }).catch((err: any) => console.warn('Supabase broadcast error:', err));
       } else if (status === 'CHANNEL_ERROR') {
-        console.error('Supabase Realtime connection error:', err || 'Unknown error. Please verify your credentials and ensure Realtime is enabled in your Supabase project dashboard.');
+        console.warn('Supabase Realtime connection error:', err || 'Unknown error. Please verify your credentials and ensure Realtime is enabled in your Supabase project dashboard.');
       } else if (status === 'TIMED_OUT') {
-        console.error('Supabase Realtime connection timed out.');
+        console.warn('Supabase Realtime connection timed out.');
       }
     });
 };

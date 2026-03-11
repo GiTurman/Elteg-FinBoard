@@ -159,7 +159,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
   const groupedRequests = useMemo(() => {
     const groups: Record<string, ExpenseRequest[]> = {};
     allRequests.forEach(req => {
-      const key = req.boardDate; 
+      const key = req.boardDate || 'No Date'; 
       if (!groups[key]) groups[key] = [];
       groups[key].push(req);
     });
@@ -167,16 +167,25 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
   }, [allRequests]);
 
   const availableDates = useMemo(() => {
-    return Object.keys(groupedRequests).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    return Object.keys(groupedRequests).sort((a, b) => {
+      if (a === 'No Date') return 1;
+      if (b === 'No Date') return -1;
+      return new Date(b).getTime() - new Date(a).getTime();
+    });
   }, [groupedRequests]);
 
   useEffect(() => {
-    if (availableDates.length > 0 && !selectedBoardDateStr) {
-      const now = new Date();
-      now.setHours(0,0,0,0);
-      // Sort ascending to find the CLOSEST upcoming date
-      const upcoming = [...availableDates].sort((a, b) => new Date(a).getTime() - new Date(b).getTime()).find(d => new Date(d) >= now);
-      setSelectedBoardDateStr(upcoming || availableDates[0]);
+    if (availableDates.length > 0) {
+      if (!selectedBoardDateStr || !availableDates.includes(selectedBoardDateStr)) {
+        const now = new Date();
+        now.setHours(0,0,0,0);
+        // Sort ascending to find the CLOSEST upcoming date
+        const validDates = availableDates.filter(d => d !== 'No Date');
+        const upcoming = validDates.sort((a, b) => new Date(a).getTime() - new Date(b).getTime()).find(d => new Date(d) >= now);
+        setSelectedBoardDateStr(upcoming || availableDates[0]);
+      }
+    } else {
+      setSelectedBoardDateStr('');
     }
   }, [availableDates, selectedBoardDateStr]);
 

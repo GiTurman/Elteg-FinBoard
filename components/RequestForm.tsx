@@ -118,7 +118,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ user, onSuccess }) => 
         ]);
 
       if (supabaseError) {
-        console.error('Supabase Insert Error:', supabaseError);
+        console.warn('Supabase Insert Error:', supabaseError);
         // We don't throw here yet, we want to try the mock service too
       }
 
