@@ -104,6 +104,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
   const [funds, setFunds] = useState<ExpenseFund[]>([]);
   const [fundBalances, setFundBalances] = useState<FundBalance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ExpenseRequest | null>(null);
   const [notes, setNotes] = useState<Record<string, { director?: string; fin?: string; discussion?: string }>>({});
@@ -114,26 +115,32 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
 
   const loadData = async () => {
     setLoading(true);
-    const [fundData, balanceData, boardRequests] = await Promise.all([
-      getExpenseFunds(),
-      getRealTimeFundBalances(),
-      getDirectorBoardRequests(),
-    ]);
-    setFunds(fundData);
-    setFundBalances(balanceData);
-    setRequests(boardRequests);
+    setErrorMessage(null);
+    try {
+      const [fundData, balanceData, boardRequests] = await Promise.all([
+        getExpenseFunds(),
+        getRealTimeFundBalances(),
+        getDirectorBoardRequests(),
+      ]);
+      setFunds(fundData);
+      setFundBalances(balanceData);
+      setRequests(boardRequests);
 
-    // Initialise notes from saved data
-    const init: Record<string, { director?: string; fin?: string; discussion?: string }> = {};
-    boardRequests.forEach(r => {
-      init[r.id] = {
-        director: r.directorNote || '',
-        fin: r.finDirectorNote || '',
-        discussion: r.discussionResult || '',
-      };
-    });
-    setNotes(init);
-    setLoading(false);
+      // Initialise notes from saved data
+      const init: Record<string, { director?: string; fin?: string; discussion?: string }> = {};
+      boardRequests.forEach(r => {
+        init[r.id] = {
+          director: r.directorNote || '',
+          fin: r.finDirectorNote || '',
+          discussion: r.discussionResult || '',
+        };
+      });
+      setNotes(init);
+    } catch (e) {
+      setErrorMessage('მონაცემების ჩატვირთვა ვერ მოხერხდა');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadData(); }, [syncTrigger]);
@@ -172,7 +179,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
       await updateRequestStatus(id, RequestStatus.FD_APPROVED, user.id);
       removeRequest(id);
     } catch (e) {
-      alert('ოპერაცია ვერ შესრულდა');
+      setErrorMessage('ოპერაცია ვერ შესრულდა');
     } finally {
       setProcessingId(null);
     }
@@ -190,7 +197,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
       await updateRequestStatus(id, RequestStatus.RETURNED_TO_MANAGER, user.id);
       removeRequest(id);
     } catch (e) {
-      alert('ოპერაცია ვერ შესრულდა');
+      setErrorMessage('ოპერაცია ვერ შესრულდა');
     } finally {
       setProcessingId(null);
     }
@@ -208,7 +215,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
       await updateRequestStatus(id, RequestStatus.RETURNED_TO_MANAGER, user.id);
       removeRequest(id);
     } catch (e) {
-      alert('ოპერაცია ვერ შესრულდა');
+      setErrorMessage('ოპერაცია ვერ შესრულდა');
     } finally {
       setProcessingId(null);
     }
@@ -260,6 +267,11 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
 
   return (
     <div className="space-y-6 font-sans relative">
+      {errorMessage && (
+        <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-bold">
+          {errorMessage}
+        </div>
+      )}
       {selectedRequest && (
         <RequestDetail request={selectedRequest} onClose={() => setSelectedRequest(null)} />
       )}
@@ -419,6 +431,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
                             onClick={() => setSelectedRequest(req)}
                             className="p-1.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
                             title="დეტალები"
+                            aria-label="დეტალების ნახვა"
                           >
                             <Eye size={13} />
                           </button>
@@ -428,6 +441,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
                             onClick={() => handleReturn(req.id)}
                             className="flex items-center gap-1 px-2 py-1.5 bg-yellow-500 text-white text-[10px] font-bold uppercase rounded hover:bg-yellow-600 transition-colors shadow"
                             title="დაბრუნება"
+                            aria-label="მოთხოვნის დაბრუნება"
                           >
                             <CornerUpLeft size={12} /> დაბრ.
                           </button>
@@ -442,6 +456,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
                               !hasAssignedFund ? 'საჭიროა ფონდის მითითება' :
                               'გადატანა FD საბოლოო დასტურზე'
                             }
+                            aria-label="გადატანა FD საბოლოო დასტურზე"
                           >
                             <ArrowRight size={12} /> გადატ.
                           </button>
