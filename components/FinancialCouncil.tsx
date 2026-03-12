@@ -155,7 +155,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   const [sessions, setSessions] = useState<FinancialSession[]>([]);
   const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null);
   const [archiveYear, setArchiveYear] = useState<number>(new Date().getFullYear());
-  const [archiveMonth, setArchiveMonth] = useState<string>(''); 
+  const [archiveMonth, setArchiveMonth] = useState<string>('');
   const [groupByMonth, setGroupByMonth] = useState<boolean>(true);
   const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
 
@@ -164,6 +164,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   const [editError, setEditError] = useState<string | null>(null);
 
   const [finalRequests, setFinalRequests] = useState<ExpenseRequest[]>([]);
+  const [allRequests, setAllRequests] = useState<ExpenseRequest[]>([]);
   const [dispatchedHistory, setDispatchedHistory] = useState<ExpenseRequest[]>([]); 
   
   const [debtors, setDebtors] = useState<DebtRecord[]>([]);
@@ -206,7 +207,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       setLoading(true);
 
       const [
-        banks, cats, initialRules, funds, sessList, inflationRate, budget2026Data
+        banks, cats, initialRules, funds, sessList, inflationRate, budget2026Data, allReqs
       ] = await Promise.all([
         getBankAccounts(),
         getRevenueCategories(),
@@ -214,8 +215,11 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
         getExpenseFunds(),
         getFinancialCouncilSessions(),
         getInflationRate(),
-        getAnnualBudget(2026)
+        getAnnualBudget(2026),
+        getAllRequests()
       ]);
+      
+      setAllRequests(allReqs);
       
       let balances: FundBalance[] = [];
       if (selectedSessionDate && (currentStep === 2 || (currentStep >= 3 && currentStep <= 10))) {
@@ -277,7 +281,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       setLoading(false);
     };
     init();
-  }, [currentStep, selectedSessionDate, syncTrigger]); 
+  }, [currentStep, syncTrigger]); 
 
   useEffect(() => {
     if (currentStep === 11) { 
@@ -434,15 +438,14 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   const handleOpenBoard = async () => {
     const session = await openBoardSession(user);
     setActiveBoardSession(session);
-    setSelectedSessionDate(null);
     setCurrentStep(1);
   };
 
   const handleCloseBoard = async () => {
     await closeBoardSession();
     setActiveBoardSession(null);
-    setCurrentStep(0);
-    setSelectedSessionDate(null);
+    setCurrentStep(1); 
+    // setSelectedSessionDate(null); // REMOVED
     // Reset report state
     setIsReportGenerated(false);
     setReportData(null);
@@ -451,13 +454,12 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   };
 
   const handleStartNewSession = () => {
-      setSelectedSessionDate(null); 
       setCurrentStep(1); 
   };
 
   const handleOpenArchive = (dateStr: string) => {
       setSelectedSessionDate(dateStr);
-      setCurrentStep(2); 
+      setCurrentStep(0); 
   };
 
   const handleBankSync = async () => {
@@ -512,7 +514,6 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   const revenueVariancePct = totalPlannedRevenue > 0 ? (revenueVariance / totalPlannedRevenue) * 100 : 0;
 
   const handleMatrixChange = (id: string, value: number) => {
-    if (selectedSessionDate) return;
 
     setFundRules(prev =>
       prev.map(rule => {
@@ -526,7 +527,6 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   };
   
   const handleFactChange = (id: string, value: number) => {
-    if (selectedSessionDate) return;
     setFundRules(prev =>
       prev.map(rule =>
         rule.id === id ? { ...rule, manualFactAmount: isNaN(value) ? 0 : value } : rule
@@ -544,12 +544,8 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   };
   
   const weeklyTotalRevenue = useMemo(() => {
-    if (selectedSessionDate) {
-        const session = sessions.find(s => s.dateConducted === selectedSessionDate);
-        return session ? session.totalRevenue : 0;
-    }
     return totalActualRevenue;
-  }, [selectedSessionDate, sessions, totalActualRevenue]);
+  }, [totalActualRevenue]);
 
   const groupedFunds = useMemo(() => {
       const groups = { Direct: [] as any[], Marginal: [] as any[], Adjustable: [] as any[], Special: [] as any[] };
@@ -718,237 +714,22 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                     )}
                     {selectedSessionDate && (
                         <span className="text-xs font-bold bg-gray-200 px-2 py-0.5 rounded text-gray-700 flex items-center gap-1">
-                            <Lock size={10} /> Read-Only: {formatDateTbilisi(new Date(selectedSessionDate))}
-                        </span>
-                    )}
-                </div>
-            </div>
-           </div>
-           
-           <div className="flex items-center gap-3">
-               {activeBoardSession && isFinDirector && currentStep !== 0 && (
-                    <button onClick={() => { setCurrentStep(0); setSelectedSessionDate(null); }} className="text-xs font-bold text-gray-500 hover:text-black uppercase border-b border-gray-300 pb-0.5">
-                        არქივში დაბრუნება
-                    </button>
-               )}
-               {!activeBoardSession && currentStep !== 0 && (
-                    <button onClick={() => { setCurrentStep(0); setSelectedSessionDate(null); }} className="text-xs font-bold text-gray-500 hover:text-black uppercase border-b border-gray-300 pb-0.5">
-                        არქივში დაბრუნება
-                    </button>
-               )}
-           </div>
-        </div>
-      </div>
-
-      {currentStep !== 0 && (
-        <div className="overflow-x-auto pb-4 scrollbar-hide">
-            <div className="flex items-center min-w-max gap-2 px-1">
-            {STEPS.map((step, index) => {
-                if (index === 0) return null;
-                
-                const stepNum = index;
-                const isActive = stepNum === currentStep;
-                return (
-                <div key={index} className="flex items-center">
-                    <button 
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all text-xs font-bold uppercase ${isActive ? 'bg-black text-white border-black shadow-lg scale-105 z-10' : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'}`}
-                    onClick={() => setCurrentStep(stepNum)}
-                    >
-                    <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] ${isActive ? 'bg-white text-black' : 'bg-gray-200 text-gray-500'}`}>{stepNum}</span>
-                    <span>{step}</span>
-                    </button>
-                    {index < STEPS.length - 1 && <div className={`flex-1 h-1 transition-colors ${index < currentStep ? 'bg-black' : 'bg-gray-100'}`}></div>}
-                </div>
-                );
-            })}
-            </div>
-        </div>
-      )}
-
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm min-h-[600px] p-6 md:p-8">
-        {loading ? <div className="text-center p-12 text-gray-400">მონაცემები იტვირთება...</div> : (
-          <>
-             {currentStep === 0 && (
-                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
-                     {!isTopLevel ? (
-                         <div className="flex flex-col items-center justify-center py-24 text-center">
-                             <div className="w-20 h-20 bg-red-50 text-red-400 rounded-full flex items-center justify-center mb-6">
-                                 <Lock size={40} />
-                             </div>
-                             <h3 className="text-xl font-bold text-gray-900 mb-2">წვდომა შეზღუდულია</h3>
-                             <p className="text-gray-500 max-w-md">არქივის დათვალიერების უფლება აქვთ მხოლოდ დამფუძნებელს, დირექტორს და ფინანსურ დირექტორს.</p>
-                         </div>
-                     ) : (
-                     <>
-                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-gray-100 pb-6">
-                         <h2 className="text-2xl font-bold flex items-center gap-3">
-                             <div className="p-2 bg-gray-100 text-gray-600 rounded-lg"><Archive size={24} /></div>
-                             ფინანსური არქივი
-                         </h2>
-                         
-                         <div className="flex flex-wrap items-center gap-3">
-                             <div className="relative">
-                                 <select 
-                                    value={archiveYear} 
-                                    onChange={(e) => setArchiveYear(parseInt(e.target.value))}
-                                    className="appearance-none bg-white border border-gray-300 text-black py-2 pl-4 pr-10 rounded font-bold uppercase text-xs focus:ring-2 focus:ring-black focus:border-transparent outline-none"
-                                 >
-                                     <option value={2025}>2025 წელი</option>
-                                     <option value={2026}>2026 წელი</option>
-                                 </select>
-                                 <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
-                             </div>
-
-                             <div className="relative">
-                                 <select 
-                                    value={archiveMonth} 
-                                    onChange={(e) => setArchiveMonth(e.target.value)}
-                                    className="appearance-none bg-white border border-gray-300 text-black py-2 pl-4 pr-10 rounded font-bold uppercase text-xs focus:ring-2 focus:ring-black focus:border-transparent outline-none min-w-[140px]"
-                                 >
-                                     <option value="">ყველა თვე</option>
-                                     {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
-                                 </select>
-                                 <Filter size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
-                             </div>
-
-                             <button 
-                                onClick={() => setGroupByMonth(!groupByMonth)}
-                                className={`flex items-center gap-2 px-4 py-2 border rounded text-xs font-bold uppercase transition-colors ${groupByMonth ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200'}`}
-                             >
-                                <Layers size={14} /> ჩაშლა თვეებით
-                             </button>
-                             <button
-                                onClick={handleArchiveExport}
-                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-green-700 transition-colors shadow-sm rounded"
-                              >
-                                <Download size={16} />
-                                ექსპორტი
-                              </button>
-
-                             <div className="w-px h-8 bg-gray-200 mx-2 hidden lg:block"></div>
-
-                             {/* Board Session Control */}
-                             {activeBoardSession ? (
-                                 <button 
-                                    onClick={() => setCurrentStep(1)}
-                                    className="px-6 py-2 bg-green-600 text-white font-bold uppercase rounded hover:bg-green-700 transition-colors flex items-center gap-2 shadow-lg text-xs"
-                                 >
-                                     <PlayCircle size={14} /> საბჭოში გადასვლა
-                                 </button>
-                             ) : (
-                                 isFinDirector ? (
-                                     <button 
-                                        onClick={handleOpenBoard}
-                                        className="px-6 py-2 bg-black text-white font-bold uppercase rounded hover:bg-gray-800 transition-colors flex items-center gap-2 shadow-lg text-xs"
-                                     >
-                                         <Gavel size={14} /> საბჭოს გახსნა
-                                     </button>
-                                 ) : (
-                                     <div className="px-4 py-2 bg-gray-100 text-gray-400 font-bold uppercase rounded text-xs flex items-center gap-2 border border-gray-200">
-                                         <Lock size={14} /> საბჭო დახურულია
-                                     </div>
-                                 )
-                             )}
-                         </div>
-                     </div>
-
-                     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
-                         <table className="w-full text-left text-sm">
-                             <thead className="bg-gray-100 text-gray-600 font-bold uppercase text-xs border-b border-gray-200">
-                                 <tr>
-                                     <th className="px-6 py-4">კვირა / პერიოდი</th>
-                                     <th className="px-6 py-4 text-right bg-blue-50/30 text-blue-900 border-x border-blue-100">ჯამური შემოსავალი (ფაქტი)</th>
-                                     <th className="px-6 py-4 text-right">ჯამური ხარჯი (დამტკიცებული)</th>
-                                     <th className="px-6 py-4 text-right">ნაშთი (Delta)</th>
-                                     <th className="px-6 py-4 text-center">სტატუსი</th>
-                                 </tr>
-                             </thead>
-                             <tbody className="divide-y divide-gray-100">
-                                 {filteredSessions.length === 0 ? (
-                                     <tr><td colSpan={5} className="p-12 text-center text-gray-400">არქივი ცარიელია არჩეული ფილტრებით</td></tr>
-                                 ) : groupByMonth && groupedSessions ? (
-                                     Object.entries(groupedSessions).map(([monthKey, sessionsInGroup]: [string, FinancialSession[]]) => {
-                                         const isExpanded = expandedMonths[monthKey];
-                                         const totalRev = sessionsInGroup.reduce((sum, s) => sum + s.totalRevenue, 0);
-                                         const totalExp = sessionsInGroup.reduce((sum, s) => sum + s.totalAmount, 0);
-                                         const totalDelta = totalRev - totalExp;
-
-                                         return (
-                                             <React.Fragment key={monthKey}>
-                                                 <tr className="bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors border-b border-gray-200" onClick={() => toggleMonthExpand(monthKey)}>
-                                                     <td className="px-6 py-4 font-bold text-black flex items-center gap-2">
-                                                         {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                                         {monthKey} <span className="text-gray-400 font-normal text-xs ml-2">({sessionsInGroup.length} კვირა)</span>
-                                                     </td>
-                                                     <td className="px-6 py-4 text-right font-mono font-bold text-blue-900 bg-blue-50/20">{totalRev.toLocaleString()} ₾</td>
-                                                     <td className="px-6 py-4 text-right font-mono font-bold text-black">{totalExp.toLocaleString()} ₾</td>
-                                                     <td className={`px-6 py-4 text-right font-mono font-bold ${totalDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                         {totalDelta > 0 ? '+' : ''}{totalDelta.toLocaleString()} ₾
-                                                     </td>
-                                                     <td className="px-6 py-4 text-center"></td>
-                                                 </tr>
-                                                 {isExpanded && sessionsInGroup.map(session => (
-                                                     <tr 
-                                                        key={session.id} 
-                                                        onClick={() => handleOpenArchive(session.dateConducted)}
-                                                        className="hover:bg-blue-50 transition-colors cursor-pointer group bg-white"
-                                                     >
-                                                         <td className="px-6 py-3 pl-12 text-sm">
-                                                             <div className="font-bold text-black">კვირა #{session.weekNumber}</div>
-                                                             <div className="text-xs text-gray-500">{session.periodStart} - {session.periodEnd}</div>
-                                                         </td>
-                                                         <td className="px-6 py-3 text-right font-mono text-gray-600 bg-blue-50/10 text-xs">
-                                                             {session.totalRevenue.toLocaleString()} ₾
-                                                         </td>
-                                                         <td className="px-6 py-3 text-right font-mono font-bold text-black text-xs">
-                                                             {session.totalAmount.toLocaleString()} ₾
-                                                         </td>
-                                                         <td className="px-6 py-3 text-right font-mono text-xs">
-                                                             <span className={`px-2 py-1 rounded font-bold ${session.netBalance >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                                 {session.netBalance > 0 ? '+' : ''}{session.netBalance.toLocaleString()} ₾
-                                                             </span>
-                                                         </td>
-                                                         <td className="px-6 py-3 text-center">
-                                                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                                 session.status === 'active' ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-gray-100 text-gray-500 border border-gray-200'
-                                                             }`}>
-                                                                 {session.status === 'active' ? 'აქტიური' : 'დასრულებული'}
-                                                             </span>
-                                                         </td>
-                                                     </tr>
-                                                 ))}
-                                             </React.Fragment>
-                                         );
-                                     })
-                                 ) : (
-                                     filteredSessions.map((session) => (
-                                         <tr key={session.id} onClick={() => handleOpenArchive(session.dateConducted)} className="hover:bg-blue-50 transition-colors cursor-pointer group">
-                                             <td className="px-6 py-4 font-bold text-black">
-                                                 <div className="flex flex-col">
-                                                     <span>კვირა #{session.weekNumber}</span>
-                                                     <span className="text-[10px] text-gray-400 font-normal">{session.periodStart} - {session.periodEnd}</span>
-                                                 </div>
-                                             </td>
-                                             <td className="px-6 py-4 text-right font-mono font-bold text-blue-900 bg-blue-50/10">{session.totalRevenue.toLocaleString()} ₾</td>
-                                             <td className="px-6 py-4 text-right font-mono font-bold text-black">{session.totalAmount.toLocaleString()} ₾</td>
-                                             <td className="px-6 py-4 text-right font-mono font-bold">
-                                                 <span className={`${session.netBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{session.netBalance > 0 ? '+' : ''}{session.netBalance.toLocaleString()} ₾</span>
-                                             </td>
-                                             <td className="px-6 py-4 text-center">
-                                                 <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold uppercase ${session.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{session.status === 'active' ? 'აქტიური' : 'არქივირებული'}</span>
-                                             </td>
-                                         </tr>
-                                     ))
-                                 )}
-                             </tbody>
-                         </table>
-                     </div>
-                     </>
-                     )}
-                 </div>
-             )}
-
-             {currentStep === 1 && (
+                 {currentStep === 0 && (
+                <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-6">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-2xl font-bold flex items-center gap-3"><div className="p-2 bg-gray-100 text-gray-600 rounded-lg"><Archive size={24} /></div>ფინანსური არქივი</h2>
+                        <div className="flex gap-2">
+                            <select className="px-4 py-2 bg-white border border-gray-300 rounded text-xs font-bold uppercase" value={archiveYear} onChange={(e) => setArchiveYear(parseInt(e.target.value))}>
+                                {[2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                            <select className="px-4 py-2 bg-white border border-gray-300 rounded text-xs font-bold uppercase" value={archiveMonth} onChange={(e) => setArchiveMonth(e.target.value)}>
+                                <option value="">ყველა თვე</option>
+                                {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                            <button onClick={() => setGroupByMonth(!groupByMonth)} className={`px-4 py-2 border rounded text-xs font-bold uppercase ${groupByMonth ? 'bg-black text-white' : 'bg-white text-black'}`}>დაჯგუფება</button>
+                            <button onClick={handleArchiveExport} className="px-4 py-2 bg-white border border-gray-300 text-black rounded text-xs font-bold uppercase"><Download size={14} /> ექსპორტი</button>
+                        </div>
+                               {currentStep === 1 && (
                 <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-8">
                    <div className="flex items-center justify-between">
                      <h2 className="text-2xl font-bold flex items-center gap-3"><div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><LinkIcon size={24} /></div>ანგარიშების მართვა & შემოსავლები</h2>
@@ -957,6 +738,37 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                        <button onClick={handleBankSync} disabled={isSyncing} className="px-4 py-2 bg-gray-100 text-black rounded text-xs font-bold uppercase"><RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} /> სინქრონიზაცია</button>
                      </div>
                   </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+d-cols-1 lg:grid-cols-2 gap-8">
+             <div className="border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-xs">
+                                <tr>
+                                    <th className="px-4 py-3">თარიღი</th>
+                                    <th className="px-4 py-3">სტატუსი</th>
+                                    <th className="px-4 py-3 text-right">მოქმედება</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {filteredSessions
+                                  .filter(s => {
+                                      const sessionRequests = allRequests.filter(r => r.boardDate === s.dateConducted);
+                                      return sessionRequests.some(r => r.totalAmount === 48 && r.currency === Currency.GEL);
+                                  })
+                                  .map(s => (
+                                    <tr key={s.id}>
+                                        <td className="px-4 py-3">{formatDateTbilisi(new Date(s.dateConducted))}</td>
+                                        <td className="px-4 py-3">დახურული</td>
+                                        <td className="px-4 py-3 text-right">
+                                            <button onClick={() => handleOpenArchive(s.dateConducted)} className="text-blue-600 hover:underline">ნახვა</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+             )}
                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                       <div className="border border-gray-200 rounded-lg overflow-hidden">
                           <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center"><span className="font-bold text-sm uppercase text-gray-600">საბანკო ანგარიშები</span></div>
@@ -1062,7 +874,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                                    {isTopLevel && <th className="px-2 py-4 w-24 text-center">Sync Status</th>}
                                    <th className="px-4 py-4 w-32 text-center">განაწილება (%)</th>
                                    <th className="px-4 py-4 w-48 text-right">გეგმა (₾)</th>
-                                   <th className="px-4 py-4 text-right w-48">ფაქტი (₾) {selectedSessionDate && <Lock size={10} className="inline ml-1"/>}</th>
+                                   <th className="px-4 py-4 text-right w-48">ფაქტი (₾)</th>
                                    <th className="px-4 py-4 text-right w-48">გადახრა (+/-)</th>
                                </tr>
                            </thead>
@@ -1081,7 +893,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                                            {isTopLevel && (<td className={`px-2 py-4 text-center font-bold text-xs ${row.nameMismatch ? 'text-red-600' : ''}`}><span title={row.syncStatus === '✅' ? 'Linked to Budget 2026' : 'Name Mismatch / No Link Found'}>{row.nameMismatch ? 'Name Mismatch' : row.syncStatus}</span></td>)}
                                            <td className="px-4 py-4 font-mono text-center text-gray-500">{row.percentage > 0 ? `${row.percentage.toFixed(2)}%` : 'N/A'}</td>
                                            <td className="px-4 py-4 text-right">
-                                              {row.category === 'Direct' && !selectedSessionDate ? (
+                                              {row.category === 'Direct' ? (
                                                 <input 
                                                   type="text" 
                                                   value={formatNumber(row.planAmount)} 
@@ -1096,7 +908,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                                               )}
                                            </td>
                                            <td className="px-4 py-4 text-right font-mono">
-                                                {row.category === 'Direct' && !selectedSessionDate ? (
+                                                {row.category === 'Direct' ? (
                                                     <input
                                                         type="text"
                                                         value={formatNumber(row.factAmount)}
