@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
-import { User, UserRole, Language } from '../types';
-import { getAllUsers, addUserMock, updateUserMock, deleteUserMock, useSync } from '../services/mockService';
+import { User, UserRole, Language, LogAction } from '../types';
+import { getAllUsers, addUserMock, updateUserMock, deleteUserMock, useSync, logActivity } from '../services/mockService';
 // In production, uncomment the following line and replace the mock functions:
 // import { fetchUsers, addUser, updateUser, deleteUser } from '../services/firebaseUserService';
 import { 
@@ -120,8 +120,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, lan
     try {
       if (editingUser) {
         await updateUserMock(editingUser.id, formData);
+        logActivity(currentUser, LogAction.UPDATE_USER, `Updated user: ${editingUser.email} (${editingUser.name})`);
       } else {
         await addUserMock(formData);
+        logActivity(currentUser, LogAction.CREATE_USER, `Created new user: ${formData.email} (${formData.name})`);
       }
       setIsModalOpen(false);
       loadUsers();
@@ -132,8 +134,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, lan
   };
 
   const handleDelete = async (id: string) => {
+    const userToDelete = users.find(u => u.id === id);
     if (window.confirm(t('deleteConfirm'))) {
       await deleteUserMock(id);
+      if (userToDelete) {
+        logActivity(currentUser, LogAction.DELETE_USER, `Deleted user: ${userToDelete.email} (${userToDelete.name})`);
+      }
       loadUsers();
     }
   };

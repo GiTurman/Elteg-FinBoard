@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { User, ExpenseRequest, RequestStatus, UserRole, ExpenseFund, Priority, FundBalance } from '../types';
+import { User, ExpenseRequest, RequestStatus, UserRole, ExpenseFund, Priority, FundBalance, Currency } from '../types';
 import { RequestDetail } from './RequestDetail';
 import { 
   getDirectorBoardRequests, 
@@ -7,8 +7,11 @@ import {
   updateRequestDetails,
   getExpenseFunds,
   getRealTimeFundBalances,
-  useSync
+  useSync,
+  MOCK_RATES,
+  logActivity
 } from '../services/mockService';
+import { LogAction } from '../types';
 import { 
   Check, 
   X, 
@@ -147,7 +150,10 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
 
   // ── totals ──────────────────────────────────────────────────────────
   const pendingTotal = useMemo(
-    () => requests.reduce((sum, r) => sum + r.totalAmount, 0),
+    () => requests.reduce((sum, r) => {
+      const rate = r.currency === Currency.USD ? MOCK_RATES.USD : r.currency === Currency.EUR ? MOCK_RATES.EUR : 1;
+      return sum + (r.totalAmount * rate);
+    }, 0),
     [requests]
   );
 
@@ -177,6 +183,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
     try {
       await saveNotes(id);
       await updateRequestStatus(id, RequestStatus.FD_APPROVED, user.id);
+      logActivity(user, LogAction.APPROVE_REQUEST, `Request ${id} approved at director level`);
       removeRequest(id);
     } catch (e) {
       setErrorMessage('ოპერაცია ვერ შესრულდა');
@@ -195,6 +202,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
         lastComment: comment || 'დაბრუნდა კომენტარის გარეშე',
       });
       await updateRequestStatus(id, RequestStatus.RETURNED_TO_MANAGER, user.id);
+      logActivity(user, LogAction.RETURN_TO_COUNCIL, `Request ${id} returned to manager with comment: ${comment}`);
       removeRequest(id);
     } catch (e) {
       setErrorMessage('ოპერაცია ვერ შესრულდა');
@@ -213,6 +221,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
         lastComment: `საბჭოს მიერ უარყოფილია: ${comment || 'მიზეზი არ არის'}`,
       });
       await updateRequestStatus(id, RequestStatus.RETURNED_TO_MANAGER, user.id);
+      logActivity(user, LogAction.REJECT_REQUEST, `Request ${id} rejected by council with comment: ${comment}`);
       removeRequest(id);
     } catch (e) {
       setErrorMessage('ოპერაცია ვერ შესრულდა');
@@ -231,6 +240,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
     if (field === 'director') upd.directorNote = value;
     if (field === 'fin') upd.finDirectorNote = value;
     await updateRequestDetails(id, upd);
+    logActivity(user, LogAction.UPDATE_REQUEST, `Signature/Note updated for request ${id} by ${field}: ${value}`);
   };
 
   const handleFundAssignment = async (id: string, fundId: string) => {
@@ -238,12 +248,16 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
     setRequests(prev => prev.map(r => r.id === id ? { ...r, assignedFundId: fundId } : r));
     const newBalances = await getRealTimeFundBalances();
     setFundBalances(newBalances);
+    const fundName = funds.find(f => f.id === fundId)?.name || fundId;
+    logActivity(user, LogAction.UPDATE_REQUEST, `Fund ${fundName} assigned to request ${id}`);
   };
 
   const handleExport = () => {
     const headers = {
       requesterName: 'მომთხოვნი',
       department: 'დეპარტამენტი',
+      manualStatus: 'სტატუსი',
+      category: 'კატეგორია',
       itemName: 'ხარჯის დასახელება',
       totalAmount: 'ჯამური თანხა',
       currency: 'ვალუტა',
@@ -260,6 +274,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
       directorNote: notes[r.id]?.director || r.directorNote,
     }));
     exportGenericToExcel(data, headers, 'Council Review', 'საბჭოს_განხილვა');
+    logActivity(user, LogAction.EXPORT_DB, 'Exported Council Review requests to Excel');
   };
 
   // ── render ────────────────────────────────────────────────────────────
@@ -307,7 +322,10 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
               <tr>
                 <th className="px-3 py-3 border-r">#</th>
                 <th className="px-3 py-3 border-r">მომთხოვნი / დეპარტამენტი</th>
-                <th className="px-3 py-3 border-r min-w-[280px]">ხარჯის დასახელება</th>
+                <th className="px-3 py-3 border-r">სტატუსი</th>
+                <th className="px-3 py-3 border-r">კატეგორია</th>
+                <th className="px-3 py-3 border-r">ვალუტა</th>
+                <th className="px-3 py-3 border-r min-w-[200px]">ხარჯის დასახელება</th>
                 <th className="px-3 py-3 border-r text-right">თანხა</th>
                 <th className="px-3 py-3 border-r w-52 text-center bg-blue-50/50">
                   <span className="flex items-center gap-1 justify-center"><Wallet size={12}/> ფონდი (ნაშთი)</span>
@@ -340,9 +358,36 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
                       <div className="mt-1"><PriorityBadge priority={req.priority} /></div>
                     </td>
 
+                    {/* Status (Manual) */}
+                    <td className="px-2 py-3 border-r align-top">
+                      <input 
+                        type="text" 
+                        value={req.manualStatus || ''} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setRequests(prev => prev.map(r => r.id === req.id ? { ...r, manualStatus: val } : r));
+                        }}
+                        onBlur={async (e) => {
+                          await updateRequestDetails(req.id, { manualStatus: e.target.value });
+                        }}
+                        placeholder="სტატუსი..."
+                        className="w-full text-[10px] border-b border-gray-200 focus:border-black outline-none bg-transparent"
+                      />
+                    </td>
+
+                    {/* Category */}
+                    <td className="px-3 py-3 border-r align-top font-bold text-gray-700 whitespace-nowrap">
+                      {req.category}
+                    </td>
+
+                    {/* Currency */}
+                    <td className="px-3 py-3 border-r align-top text-center font-bold text-gray-500">
+                      {req.currency}
+                    </td>
+
                     {/* Item */}
                     <td className="px-3 py-3 border-r align-top whitespace-normal">
-                      <div className="font-bold text-black">{req.itemName || req.category}</div>
+                      <div className="font-bold text-black">{req.itemName}</div>
                       {req.description && (
                         <p className="text-[10px] text-gray-500 mt-0.5 italic">"{req.description}"</p>
                       )}
@@ -471,7 +516,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
             {/* Summary footer */}
             <tfoot>
               <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
-                <td colSpan={3} className="px-3 py-3 text-right uppercase text-xs">სულ:</td>
+                <td colSpan={6} className="px-3 py-3 text-right uppercase text-xs">სულ (GEL):</td>
                 <td className="px-3 py-3 text-right font-mono text-red-700">
                   -{formatNumber(pendingTotal)} GEL
                 </td>

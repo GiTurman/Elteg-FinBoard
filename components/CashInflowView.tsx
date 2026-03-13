@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { User, UserRole, CashInflowRecord } from '../types';
+import { User, UserRole, CashInflowRecord, Currency } from '../types';
 import { 
     Download, Save, X, Plus, CircleDollarSign, BarChart2, Zap, ChevronDown, ChevronRight, Trash2 
 } from 'lucide-react';
@@ -14,7 +14,8 @@ import {
     deleteCurrentWeekCashInflowEntry,
     finalizeCurrentWeek,
     USERS,
-    useSync
+    useSync,
+    MOCK_RATES
 } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 
@@ -48,8 +49,8 @@ const generateAIInsightsForInflow = (currentWeekData: any[]) => {
     const totals = currentWeekData.reduce((acc, r) => {
         const cat = r.category;
         if (!acc[cat]) acc[cat] = { budgeted: 0, actual: 0 };
-        acc[cat].budgeted += r.budgeted;
-        acc[cat].actual += r.actual;
+        acc[cat].budgeted += (r.budgeted || 0);
+        acc[cat].actual += (r.actual || 0);
         return acc;
     }, {} as Record<string, { budgeted: number, actual: number }>);
     let insights = [];
@@ -82,7 +83,10 @@ const CashInflowAnalysisModal: React.FC<AnalysisModalProps> = ({ isOpen, onClose
     const latestWeekKey = useMemo(() => Object.keys(data).sort().pop() || '', [data]);
     const latestWeekData = useMemo(() => data[latestWeekKey] || [], [data, latestWeekKey]);
     const categoryTotals = useMemo(() => {
-        const totals = latestWeekData.reduce((acc, r) => { acc[r.category] = (acc[r.category] || 0) + r.actual; return acc; }, {} as Record<string, number>);
+        const totals = latestWeekData.reduce((acc, r) => { 
+            acc[r.category] = (acc[r.category] || 0) + (r.actual || 0); 
+            return acc; 
+        }, {} as Record<string, number>);
         return Object.entries(totals).map(([name, value]) => ({ name, ფაქტიური: value }));
     }, [latestWeekData]);
     const aiSummary = useMemo(() => generateAIInsightsForInflow(latestWeekData), [latestWeekData]);
@@ -161,7 +165,13 @@ export const CashInflowView: React.FC<{ user: User }> = ({ user }) => {
       alert('მიმდინარე კვირის შემოსავლები დაარქივდა.');
   };
 
-  const currentWeekTotals = useMemo(() => currentWeekEntries.reduce((acc, curr) => { acc.budgeted += Number(curr.budgeted) || 0; acc.actual += Number(curr.actual) || 0; return acc; }, { budgeted: 0, actual: 0 }), [currentWeekEntries]);
+  const currentWeekTotals = useMemo(() => {
+    return currentWeekEntries.reduce((acc, curr) => {
+      acc.budgeted += (Number(curr.budgeted) || 0);
+      acc.actual += (Number(curr.actual) || 0);
+      return acc;
+    }, { budgeted: 0, actual: 0 });
+  }, [currentWeekEntries]);
 
   const toggleWeek = (key: string) => setExpandedWeeks(prev => ({ ...prev, [key]: !prev[key] }));
   const sortedWeekKeys = useMemo(() => Object.keys(archiveData).sort((a, b) => b.localeCompare(a)), [archiveData]);
@@ -223,9 +233,9 @@ export const CashInflowView: React.FC<{ user: User }> = ({ user }) => {
                     </tbody>
                     <tfoot className="bg-gray-800 text-white font-bold text-xs uppercase">
                         <tr>
-                            <td colSpan={isTopLevel ? 3 : 2} className="px-4 py-3">ჯამი</td>
-                            <td className="px-4 py-3 text-right font-mono">{formatNumber(currentWeekTotals.budgeted)} ₾</td>
-                            <td className="px-4 py-3 text-right font-mono">{formatNumber(currentWeekTotals.actual)} ₾</td>
+                            <td colSpan={isTopLevel ? 5 : 4} className="px-4 py-3">ჯამი</td>
+                            <td className="px-4 py-3 text-right font-mono">{formatNumber(currentWeekTotals.budgeted)}</td>
+                            <td className="px-4 py-3 text-right font-mono">{formatNumber(currentWeekTotals.actual)}</td>
                             <td colSpan={2}></td>
                         </tr>
                     </tfoot>
@@ -237,11 +247,18 @@ export const CashInflowView: React.FC<{ user: User }> = ({ user }) => {
             <div className="mt-12 pt-8 border-t-2 border-dashed border-gray-200 space-y-3">
               <h3 className="text-xl font-bold">არქივი</h3>
               {sortedWeekKeys.map(weekKey => {
-                const weekData = archiveData[weekKey]; const isExpanded = !!expandedWeeks[weekKey]; const totals = weekData.reduce((acc, r) => { acc.budgeted += r.budgeted; acc.actual += r.actual; return acc; }, { budgeted: 0, actual: 0 }); const totalVariance = totals.actual - totals.budgeted;
+                const weekData = archiveData[weekKey]; 
+                const isExpanded = !!expandedWeeks[weekKey]; 
+                const totals = weekData.reduce((acc, r) => { 
+                  acc.budgeted += (r.budgeted || 0); 
+                  acc.actual += (r.actual || 0); 
+                  return acc; 
+                }, { budgeted: 0, actual: 0 }); 
+                const totalVariance = totals.actual - totals.budgeted;
                 return (
                   <div key={weekKey} className="border border-gray-200 rounded overflow-hidden bg-white shadow-sm">
                     <button onClick={() => toggleWeek(weekKey)} className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 text-left"><div className="flex items-center gap-3 font-bold text-black">{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />} {weekKey}</div><div className="flex items-center gap-4 text-xs font-mono"><span>დაგეგმილი: <span className="font-bold">{formatNumber(totals.budgeted)} ₾</span></span><span>ფაქტიური: <span className="font-bold">{formatNumber(totals.actual)} ₾</span></span><span className={`font-bold px-2 py-1 rounded ${totalVariance >=0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{totalVariance > 0 ? '+' : ''}{formatNumber(totalVariance)} ₾</span></div></button>
-                    {isExpanded && (<div className="overflow-auto max-h-[60vh] relative"><table className="w-full text-left text-sm table-auto"><thead className="sticky top-0 z-10 bg-gray-100 text-gray-600 font-bold uppercase text-xs"><tr><th className="px-4 py-3 sticky left-0 bg-gray-100 z-10">დასახელება/კლიენტი</th><th className="px-4 py-3">თარიღი</th><th className="px-4 py-3">კატეგორია</th><th className="px-4 py-3 text-right">დაგეგმილი</th><th className="px-4 py-3 text-right">ფაქტიური</th><th className="px-4 py-3 text-right">გადახრა</th><th className="px-4 py-3">კომენტარი</th></tr></thead><tbody className="divide-y divide-gray-100 bg-white">{weekData.map(rec => { const variance = rec.actual - rec.budgeted; return (<tr key={rec.id}><td className="px-4 py-2 font-bold sticky left-0 bg-white">{rec.name}</td><td className="px-4 py-2 font-mono text-gray-500">{rec.date ? new Date(rec.date).toLocaleDateString('ka-GE') : '-'}</td><td className="px-4 py-2 text-xs font-bold">{rec.category}</td><td className="px-4 py-2 text-right font-mono text-gray-500">{formatNumber(rec.budgeted)} ₾</td><td className="px-4 py-2 text-right font-mono text-green-700">{formatNumber(rec.actual)} ₾</td><td className={`px-4 py-2 text-right font-mono font-bold ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatNumber(variance)} ₾</td><td className="px-4 py-2 text-xs italic">{rec.comment}</td></tr>);})}</tbody><tfoot className="sticky bottom-0 z-10 bg-gray-800 text-white font-bold text-xs uppercase"><tr><td className="px-4 py-3 sticky left-0 bg-gray-800 z-10">ჯამი</td><td colSpan={2}></td><td className="px-4 py-3 text-right font-mono">{formatNumber(totals.budgeted)} ₾</td><td className="px-4 py-3 text-right font-mono">{formatNumber(totals.actual)} ₾</td><td className={`px-4 py-3 text-right font-mono text-base ${totalVariance >=0 ? 'text-green-400' : 'text-red-400'}`}>{formatNumber(totalVariance)} ₾</td><td></td></tr></tfoot></table></div>)}
+                    {isExpanded && (<div className="overflow-auto max-h-[60vh] relative"><table className="w-full text-left text-sm table-auto"><thead className="sticky top-0 z-10 bg-gray-100 text-gray-600 font-bold uppercase text-xs"><tr><th className="px-4 py-3 sticky left-0 bg-gray-100 z-10">დასახელება/კლიენტი</th><th className="px-4 py-3">თარიღი</th><th className="px-4 py-3">კატეგორია</th><th className="px-4 py-3 text-right">დაგეგმილი</th><th className="px-4 py-3 text-right">ფაქტიური</th><th className="px-4 py-3 text-right">გადახრა</th><th className="px-4 py-3">კომენტარი</th></tr></thead><tbody className="divide-y divide-gray-100 bg-white">{weekData.map(rec => { const variance = rec.actual - rec.budgeted; return (<tr key={rec.id}><td className="px-4 py-2 font-bold sticky left-0 bg-white">{rec.name}</td><td className="px-4 py-2 font-mono text-gray-500">{rec.date ? new Date(rec.date).toLocaleDateString('ka-GE') : '-'}</td><td className="px-4 py-2 text-xs font-bold">{rec.category}</td><td className="px-4 py-2 text-right font-mono text-gray-500">{formatNumber(rec.budgeted)}</td><td className="px-4 py-2 text-right font-mono text-green-700">{formatNumber(rec.actual)}</td><td className={`px-4 py-2 text-right font-mono font-bold ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatNumber(variance)}</td><td className="px-4 py-2 text-xs italic">{rec.comment}</td></tr>);})}</tbody><tfoot className="sticky bottom-0 z-10 bg-gray-800 text-white font-bold text-xs uppercase"><tr><td className="px-4 py-3 sticky left-0 bg-gray-800 z-10">ჯამი</td><td colSpan={2}></td><td className="px-4 py-3 text-right font-mono">{formatNumber(totals.budgeted)}</td><td className="px-4 py-3 text-right font-mono">{formatNumber(totals.actual)}</td><td className={`px-4 py-3 text-right font-mono text-base ${totalVariance >=0 ? 'text-green-400' : 'text-red-400'}`}>{formatNumber(totalVariance)}</td><td></td></tr></tfoot></table></div>)}
                   </div>
                 );
               })}

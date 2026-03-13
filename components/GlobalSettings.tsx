@@ -9,11 +9,13 @@ import {
   updateInflationRate, 
   useSync,
   exportDatabase,
-  importDatabase
+  importDatabase,
+  logActivity
 } from '../services/mockService';
-import { Language } from '../types';
+import { Language, User, LogAction } from '../types';
+import { ActivityLogs } from './ActivityLogs';
 
-export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) => {
+export const GlobalSettings: React.FC<{ language: Language; user: User }> = ({ language, user }) => {
   const [rates, setRates] = useState({ USD: 0, EUR: 0 });
   const [inflation, setInflation] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -39,15 +41,16 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
   const handleSave = async () => {
     setSaving(true);
     await Promise.all([
-      updateCurrencyRates(rates),
-      updateInflationRate(inflation)
+      updateCurrencyRates(rates, user),
+      updateInflationRate(inflation, user)
     ]);
     setSaving(false);
-    alert(language === 'ka' ? 'ინდიკატორები განახლდა!' : 'Indicators updated!');
+    alert(language === 'GE' ? 'ინდიკატორები განახლდა!' : 'Indicators updated!');
   };
 
   const handleExport = () => {
     const data = exportDatabase();
+    logActivity(user, LogAction.EXPORT_DB, 'Database backup downloaded');
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -64,7 +67,7 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
     if (!file) return;
 
     const confirmImport = window.confirm(
-      language === 'ka' 
+      language === 'GE' 
         ? 'დარწმუნებული ხართ? არსებული მონაცემები სრულად ჩანაცვლდება!' 
         : 'Are you sure? Existing data will be completely replaced!'
     );
@@ -76,12 +79,15 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
     reader.onload = async (event) => {
       const content = event.target?.result as string;
       const success = await importDatabase(content);
+      if (success) {
+        await logActivity(user, LogAction.IMPORT_DB, 'Database restored from file');
+      }
       setImporting(false);
       if (success) {
-        alert(language === 'ka' ? 'მონაცემები წარმატებით აღდგა!' : 'Data restored successfully!');
+        alert(language === 'GE' ? 'მონაცემები წარმატებით აღდგა!' : 'Data restored successfully!');
         window.location.reload();
       } else {
-        alert(language === 'ka' ? 'აღდგენა ვერ მოხერხდა!' : 'Restore failed!');
+        alert(language === 'GE' ? 'აღდგენა ვერ მოხერხდა!' : 'Restore failed!');
       }
     };
     reader.readAsText(file);
@@ -91,7 +97,7 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
     <div className="space-y-6">
       <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
         <h3 className="font-bold text-lg text-black mb-4">
-          {language === 'ka' ? 'ფინანსური ინდიკატორები' : 'Financial Indicators'}
+          {language === 'GE' ? 'ფინანსური ინდიკატორები' : 'Financial Indicators'}
         </h3>
         {loading ? <div>Loading rates...</div> : (
           <>
@@ -118,7 +124,7 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
                   </div>
                   <div className="grid grid-cols-3 gap-4 items-center">
                       <label className="font-bold text-sm">
-                        {language === 'ka' ? 'ინფლაციის მაჩვენებელი (%)' : 'Inflation Rate (%)'}
+                        {language === 'GE' ? 'ინფლაციის მაჩვენებელი (%)' : 'Inflation Rate (%)'}
                       </label>
                       <input
                           type="number"
@@ -136,7 +142,7 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
                   className="flex items-center gap-2 px-6 py-2 bg-black text-white rounded font-bold hover:bg-gray-800 transition-colors disabled:bg-gray-400"
                   >
                   {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
-                  {language === 'ka' ? 'შენახვა' : 'Save Indicators'}
+                  {language === 'GE' ? 'შენახვა' : 'Save Indicators'}
                   </button>
               </div>
           </>
@@ -145,10 +151,10 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
 
       <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
         <h3 className="font-bold text-lg text-black mb-4">
-          {language === 'ka' ? 'მონაცემთა ბაზის მართვა' : 'Database Management'}
+          {language === 'GE' ? 'მონაცემთა ბაზის მართვა' : 'Database Management'}
         </h3>
         <p className="text-sm text-gray-600 mb-6">
-          {language === 'ka' 
+          {language === 'GE' 
             ? 'შეგიძლიათ გადმოწეროთ მონაცემთა ბაზის სრული ასლი ან აღადგინოთ იგი ფაილიდან.' 
             : 'You can download a full backup of the database or restore it from a file.'}
         </p>
@@ -159,7 +165,7 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
             className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition-colors"
           >
             <Download size={16} />
-            {language === 'ka' ? 'ბაზის შენახვა (Export)' : 'Export Database'}
+            {language === 'GE' ? 'ბაზის შენახვა (Export)' : 'Export Database'}
           </button>
 
           <button
@@ -168,7 +174,7 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
             className="flex items-center gap-2 px-6 py-2 bg-amber-600 text-white rounded font-bold hover:bg-amber-700 transition-colors disabled:bg-gray-400"
           >
             {importing ? <RefreshCw size={16} className="animate-spin" /> : <Upload size={16} />}
-            {language === 'ka' ? 'ბაზის აღდგენა (Import)' : 'Import Database'}
+            {language === 'GE' ? 'ბაზის აღდგენა (Import)' : 'Import Database'}
           </button>
           
           <input
@@ -180,6 +186,8 @@ export const GlobalSettings: React.FC<{ language: Language }> = ({ language }) =
           />
         </div>
       </div>
+
+      <ActivityLogs user={user} language={language} />
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 // FIX: Import FundBalance from types.ts directly
-import { User, UserRole, ExpenseRequest, RequestStatus, BankAccount, RevenueCategory, MasterReportData, DebtRecord, FundBalance } from '../types';
+import { User, UserRole, ExpenseRequest, RequestStatus, BankAccount, RevenueCategory, MasterReportData, DebtRecord, FundBalance, Currency, LogAction } from '../types';
 import { 
   getFundDistributionRules, 
   getFdFinalRequests, 
@@ -31,7 +31,9 @@ import {
   saveBoardStep,
   getSavedBoardStep,
   getArchivedBoardSessions,
-  useSync
+  useSync,
+  MOCK_RATES,
+  logActivity
 } from '../services/mockService';
 import { DirectorApprovals } from './DirectorApprovals';
 import { DebtManagementView } from './DebtManagementView';
@@ -191,7 +193,10 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   
   const calculatedRevenue = useMemo(() => {
     return revenueCategories.map(cat => {
-      const total = bankAccounts.filter(b => b.mappedCategoryId === cat.id).reduce((sum, b) => sum + b.currentBalance, 0);
+      const total = bankAccounts.filter(b => b.mappedCategoryId === cat.id).reduce((sum, b) => {
+        const rate = b.currency === Currency.USD ? MOCK_RATES.USD : b.currency === Currency.EUR ? MOCK_RATES.EUR : 1;
+        return sum + (b.currentBalance * rate);
+      }, 0);
       return { ...cat, actualAmount: total };
     });
   }, [revenueCategories, bankAccounts]);
@@ -347,20 +352,22 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     setReportData(consolidatedData);
 
     setIsAiLoading(true);
-    const summary = await generateAIReportSummary(consolidatedData);
+    const summary = await generateAIReportSummary(consolidatedData, user);
     setAiConclusion(summary);
     setIsAiLoading(false);
 
     setIsReportGenerated(true);
     setIsReportLoading(false);
+    logActivity(user, LogAction.GENERATE_REPORT, `Master report generated for week ${activeBoardSession?.weekDate || 'N/A'}`);
   };
   
   const handleRegenerateAI = async () => {
     if (!reportData) return;
     setIsAiLoading(true);
-    const summary = await generateAIReportSummary(reportData);
+    const summary = await generateAIReportSummary(reportData, user);
     setAiConclusion(summary);
     setIsAiLoading(false);
+    logActivity(user, LogAction.GENERATE_AI_REPORT, `AI summary regenerated for week ${activeBoardSession?.weekDate || 'N/A'}`);
   };
   
   const handlePrint = () => { window.print(); };
@@ -368,6 +375,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   const handleFinalizeReport = () => {
     setCompletionTimestamp(new Date());
     setIsConclusionConfirmed(true); 
+    logActivity(user, LogAction.FINALIZE_REPORT, `Board closure report finalized for week ${activeBoardSession?.weekDate || 'N/A'}`);
   };
   
   const handleMultiExport = () => {
@@ -402,6 +410,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     ];
 
     exportMultiSheetExcel(sheets, 'Board_Closure_Report');
+    logActivity(user, LogAction.EXPORT_DB, `Board closure report exported to Excel for week ${activeBoardSession?.weekDate || 'N/A'}`);
   };
 
   const filteredSessions = useMemo(() => {
@@ -436,9 +445,11 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     setActiveBoardSession(session);
     setSelectedSessionDate(null);
     setCurrentStep(1);
+    logActivity(user, LogAction.OPEN_BOARD, `Board session opened for week ${session.weekDate}`);
   };
 
   const handleCloseBoard = async () => {
+    const weekDate = activeBoardSession?.weekDate || 'N/A';
     await closeBoardSession();
     setActiveBoardSession(null);
     setCurrentStep(0);
@@ -448,6 +459,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     setReportData(null);
     setCompletionTimestamp(null);
     setAiConclusion("");
+    logActivity(user, LogAction.CLOSE_BOARD, `Board session closed for week ${weekDate}`);
   };
 
   const handleStartNewSession = () => {
@@ -465,12 +477,14 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     const updated = await syncBankAccounts();
     setBankAccounts(updated);
     setTimeout(() => setIsSyncing(false), 800);
+    logActivity(user, LogAction.SYNC_BANKS, `Bank accounts synchronized manually`);
   };
 
   const handleToggleSync = async (accountId: string, currentValue: boolean) => {
     await updateBankAccountSyncStatus(accountId, !currentValue);
     const updated = await getBankAccounts();
     setBankAccounts(updated);
+    logActivity(user, LogAction.UPDATE_BANK_ACCOUNT, `Auto-sync toggled to ${!currentValue} for account ${accountId}`);
   };
 
   const handleAddManualAccount = async () => {
@@ -478,6 +492,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     const updated = await getBankAccounts();
     setBankAccounts(updated);
     handleStartEdit(newAcc);
+    logActivity(user, LogAction.ADD_BANK_ACCOUNT, `New manual bank account added: ${newAcc.id}`);
   };
 
   const handleStartEdit = (account: BankAccount) => {
@@ -504,6 +519,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       const updated = await getBankAccounts();
       setBankAccounts(updated);
       handleCancelEdit();
+      logActivity(user, LogAction.UPDATE_BANK_ACCOUNT, `Bank account details updated for ${editingId}`);
   };
 
   const totalPlannedRevenue = revenueCategories.reduce((sum, c) => sum + c.plannedAmount, 0); 
@@ -628,6 +644,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       try { 
           await updateRequestStatus(id, RequestStatus.DISPATCHED_TO_ACCOUNTING, user.id); 
           setFinalRequests(prev => prev.filter(r => r.id !== id)); 
+          logActivity(user, LogAction.TRANSFER_TO_ACCOUNTING, `Request ${id} transferred to accounting`);
       } catch(e) {alert("Error")} 
   };
   
@@ -636,6 +653,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     try {
         await updateRequestStatus(id, RequestStatus.COUNCIL_REVIEW, user.id);
         setFinalRequests(prev => prev.filter(r => r.id !== id));
+        logActivity(user, LogAction.RETURN_TO_COUNCIL, `Request ${id} returned to council review`);
     } catch(e) {
         console.error(e);
         alert("Error returning request to council");
@@ -653,6 +671,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       status: 'სტატუსი'
     };
     exportGenericToExcel(filteredSessions, headers, 'Archive', 'ფინანსური_არქივი');
+    logActivity(user, LogAction.EXPORT_DB, `Financial archive exported to Excel`);
   };
 
   const handleStep11Export = () => {
@@ -668,6 +687,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       assignedFundId: getFundName(req.assignedFundId)
     }));
     exportGenericToExcel(dataToExport, headers, 'FD Final Approval', 'FD_საბოლოო_დასტური');
+    logActivity(user, LogAction.EXPORT_DB, `FD Final Approval list exported to Excel`);
   };
   
   const handleStep12Export = () => {
@@ -685,6 +705,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       assignedFundId: getFundName(req.assignedFundId)
     }));
     exportGenericToExcel(dataToExport, headers, 'Dispatched', 'ბუღალტერიაში_გადაცემა');
+    logActivity(user, LogAction.EXPORT_DB, `Dispatched requests list exported to Excel`);
   };
   
   return (

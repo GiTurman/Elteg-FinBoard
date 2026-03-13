@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { User, ExpenseRequest, RequestStatus, DirectiveSnapshot, UserRole } from '../types';
-import { getAccountingRequests, updateRequestStatus, getDispatchedDirectives, updateDirectiveStatus, USERS, getInvoicesForAccountant, useSync } from '../services/mockService';
+import { getAccountingRequests, updateRequestStatus, getDispatchedDirectives, updateDirectiveStatus, USERS, getInvoicesForAccountant, useSync, logActivity } from '../services/mockService';
+import { LogAction } from '../types';
 import * as XLSX from 'xlsx';
 import {
   Calculator,
@@ -130,6 +131,7 @@ export const AccountantDirectivesView: React.FC<{ user: User }> = ({ user }) => 
     const el = printRefs.current[id];
     if (!el) return;
 
+    logActivity(user, LogAction.EXPORT_DB, `Printed directive ${id}`);
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) return;
 
@@ -216,6 +218,7 @@ export const AccountantDirectivesView: React.FC<{ user: User }> = ({ user }) => 
 
       // Notify all tabs / components
       window.dispatchEvent(new Event('storage'));
+      logActivity(user, LogAction.UPDATE_REQUEST, `Directive ${directive.id} marked as processed`);
       await fetchData();
     } catch (e) {
       console.error('Error updating directive status:', e);
@@ -454,6 +457,7 @@ export const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ user }
     setProcessingId(requestId);
     try {
       await updateRequestStatus(requestId, RequestStatus.PAID, user.id);
+      logActivity(user, LogAction.UPDATE_REQUEST, `Request ${requestId} marked as PAID by accountant`);
       await fetchRequests();
     } catch (e) {
       console.error(e);
@@ -486,6 +490,7 @@ export const AccountingDashboard: React.FC<AccountingDashboardProps> = ({ user }
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Registry');
     XLSX.writeFile(workbook, `Payment_Registry.xlsx`);
+    logActivity(user, LogAction.EXPORT_DB, 'Exported Payment Registry to Excel');
   };
 
   if (loading) {

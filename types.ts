@@ -113,6 +113,7 @@ export interface ExpenseRequest {
   finDirectorNote?: string; 
   discussionResult?: string; 
   lastComment?: string; 
+  manualStatus?: string; // Manual status for board discussion
   
   // PROMPT 401: Exclusive FD Control
   assignedFundId?: string; 
@@ -353,4 +354,41 @@ export interface Invoice {
   totalAmount: number;
   status: InvoiceStatus;
   createdAt: string;
+}
+
+export enum LogAction {
+  LOGIN = 'LOGIN',
+  LOGOUT = 'LOGOUT',
+  UPDATE_RATES = 'UPDATE_RATES',
+  UPDATE_INFLATION = 'UPDATE_INFLATION',
+  APPROVE_REQUEST = 'APPROVE_REQUEST',
+  REJECT_REQUEST = 'REJECT_REQUEST',
+  UPDATE_REQUEST = 'UPDATE_REQUEST',
+  CREATE_REQUEST = 'CREATE_REQUEST',
+  EXPORT_DB = 'EXPORT_DB',
+  IMPORT_DB = 'IMPORT_DB',
+  UPDATE_FUND = 'UPDATE_FUND',
+  UPDATE_BANK_ACCOUNT = 'UPDATE_BANK_ACCOUNT',
+  GENERATE_REPORT = 'GENERATE_REPORT',
+  GENERATE_AI_REPORT = 'GENERATE_AI_REPORT',
+  OPEN_BOARD = 'OPEN_BOARD',
+  CLOSE_BOARD = 'CLOSE_BOARD',
+  FINALIZE_REPORT = 'FINALIZE_REPORT',
+  SYNC_BANKS = 'SYNC_BANKS',
+  ADD_BANK_ACCOUNT = 'ADD_BANK_ACCOUNT',
+  TRANSFER_TO_ACCOUNTING = 'TRANSFER_TO_ACCOUNTING',
+  RETURN_TO_COUNCIL = 'RETURN_TO_COUNCIL',
+  CREATE_USER = 'CREATE_USER',
+  UPDATE_USER = 'UPDATE_USER',
+  DELETE_USER = 'DELETE_USER',
+}
+
+export interface LogEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole: UserRole;
+  action: LogAction | string;
+  details: string;
+  timestamp: string;
 }

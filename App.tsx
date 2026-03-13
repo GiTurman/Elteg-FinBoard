@@ -18,9 +18,10 @@ import { ProformaInvoiceForm } from './components/ProformaInvoiceForm';
 import { GeneratedInvoicesView, AccountantInvoicesView } from './components/InventoryInvoices'; // UPDATED IMPORT
 // PROMPT 6.1-008: CashInflowEntryView is removed as its logic is merged into CashInflowView
 import { 
-  USERS
+  USERS,
+  logActivity
 } from './services/mockService';
-import { User, UserRole, Language } from './types';
+import { User, UserRole, Language, LogAction } from './types';
 import { Database, CheckCircle, Loader2, Download, Lock } from 'lucide-react';
 
 const AccessDenied: React.FC = () => (
@@ -69,9 +70,13 @@ function App() {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     setActiveTab('dashboard');
+    logActivity(user, LogAction.LOGIN, `User logged in from ${window.location.origin}`);
   };
 
   const handleLogout = () => {
+    if (currentUser) {
+      logActivity(currentUser, LogAction.LOGOUT, 'User logged out manually');
+    }
     setCurrentUser(null);
     setActiveTab('dashboard');
   };
@@ -231,7 +236,7 @@ function App() {
               </div>
             </div>
             
-            {isAdmin && <GlobalSettings language={language} />}
+            {isAdmin && <GlobalSettings language={language} user={currentUser} />}
           </div>
         )}
       </Layout>

@@ -1,7 +1,7 @@
 // FIX: Add GoogleGenAI import for AI summary generation
 import { GoogleGenAI } from '@google/genai';
 // FIX: Add MasterReportData to type imports
-import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, Priority, BankAccount, RevenueCategory, ExpenseFund, FundBalance, DebtRecord, CashInflowRecord, MasterReportData, ProjectRevenue, ServiceRevenue, PartRevenue, DirectiveSnapshot, Invoice, InvoiceStatus } from '../types';
+import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, Priority, BankAccount, RevenueCategory, ExpenseFund, FundBalance, DebtRecord, CashInflowRecord, MasterReportData, ProjectRevenue, ServiceRevenue, PartRevenue, DirectiveSnapshot, Invoice, InvoiceStatus, LogEntry, LogAction } from '../types';
 import { formatNumber } from '../utils/formatters';
 import { supabase } from '../lib/supabase';
 
@@ -28,6 +28,7 @@ export let BUDGET_ANALYSIS_COMMENTS: Record<string, string> = {};
 export let MOCK_PROJECTS: ProjectRevenue[] = [];
 export let MOCK_SERVICES: ServiceRevenue[] = [];
 export let MOCK_PARTS: PartRevenue[] = [];
+export let ACTIVITY_LOGS: LogEntry[] = [];
 
 
 import { useState, useEffect } from 'react';
@@ -419,10 +420,13 @@ try {
 } catch(e) {}
 
 export const getCurrencyRates = async () => ({ ...MOCK_RATES });
-export const updateCurrencyRates = async (newRates: { USD: number; EUR: number }) => { 
+export const updateCurrencyRates = async (newRates: { USD: number; EUR: number }, user?: User) => { 
   MOCK_RATES = { ...newRates }; 
   localStorage.setItem('finboard_mock_rates', JSON.stringify(MOCK_RATES));
   safeEmit('update_state', { key: 'mockRates', value: MOCK_RATES });
+  if (user) {
+    logActivity(user, LogAction.UPDATE_RATES, `USD: ${newRates.USD}, EUR: ${newRates.EUR}`);
+  }
 };
 
 MOCK_INFLATION_RATE = 3.2;
@@ -432,10 +436,13 @@ try {
 } catch(e) {}
 
 export const getInflationRate = async () => MOCK_INFLATION_RATE;
-export const updateInflationRate = async (newRate: number) => { 
+export const updateInflationRate = async (newRate: number, user?: User) => { 
   MOCK_INFLATION_RATE = newRate; 
   localStorage.setItem('finboard_mock_inflation', JSON.stringify(MOCK_INFLATION_RATE));
   safeEmit('update_state', { key: 'mockInflation', value: MOCK_INFLATION_RATE });
+  if (user) {
+    logActivity(user, LogAction.UPDATE_INFLATION, `Rate: ${newRate}%`);
+  }
 };
 
 export const EXPENSE_FUNDS: ExpenseFund[] = [
@@ -559,6 +566,9 @@ MOCK_PARTS = [];
 try {
     const sParts = localStorage.getItem('finboard_parts');
     if (sParts) MOCK_PARTS = JSON.parse(sParts);
+
+    const sLogs = localStorage.getItem('finboard_activity_logs');
+    if (sLogs) ACTIVITY_LOGS = JSON.parse(sLogs);
 } catch(e) {}
 const syncParts = () => {
     localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS));
@@ -582,6 +592,26 @@ export const terminatePart = async (partId: string, terminationDate: string, ter
 };
 
 const generateZeroBasedMonthlyData = () => Array(12).fill({ plan: 0, fact: 0 });
+
+export const getActivityLogs = async (): Promise<LogEntry[]> => [...ACTIVITY_LOGS];
+
+export const logActivity = async (user: User, action: LogAction | string, details: string) => {
+  const newEntry: LogEntry = {
+    id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    userId: user.id,
+    userName: user.name,
+    userRole: user.role,
+    action,
+    details,
+    timestamp: new Date().toISOString(),
+  };
+  ACTIVITY_LOGS.unshift(newEntry);
+  if (ACTIVITY_LOGS.length > 1000) {
+    ACTIVITY_LOGS = ACTIVITY_LOGS.slice(0, 1000);
+  }
+  localStorage.setItem('finboard_activity_logs', JSON.stringify(ACTIVITY_LOGS));
+  safeEmit('update_state', { key: 'activityLogs', value: ACTIVITY_LOGS });
+};
 
 export const getAnnualBudget = async (year: number) => {
   if (budgetOverrideData) { return [...budgetOverrideData]; }
@@ -636,7 +666,8 @@ export const getArchivedCashInflow = async (): Promise<Record<string, CashInflow
 export const addCurrentWeekCashInflowEntry = async (entry: Partial<CashInflowRecord>, authorId: string): Promise<CashInflowRecord> => {
   const newEntry: CashInflowRecord = {
     id: `cw_${Date.now()}_${Math.random()}`,
-    name: entry.name || '', category: entry.category || 'პროექტები',
+    name: entry.name || '', 
+    category: entry.category || 'პროექტები',
     budgeted: entry.budgeted || 0, actual: entry.actual || 0,
     comment: entry.comment || '',
     authorId, timestamp: new Date().toISOString(),
@@ -975,6 +1006,7 @@ export const submitRequest = async (details: Partial<ExpenseRequest>, user: User
   const newReq = createNewRequest(details, user);
   REQUESTS.push(newReq);
   syncRequests();
+  logActivity(user, LogAction.CREATE_REQUEST, `New request created: ${newReq.id} - ${newReq.itemName}`);
   return newReq;
 };
 
@@ -1044,6 +1076,14 @@ export const updateRequestStatus = async (requestId: string, newStatus: RequestS
     }
 
     REQUESTS[index] = { ...REQUESTS[index], ...updates };
+
+    if (actor) {
+      let action = LogAction.UPDATE_REQUEST;
+      if (newStatus === RequestStatus.FD_APPROVED) action = LogAction.APPROVE_REQUEST;
+      if (newStatus === RequestStatus.RETURNED_TO_MANAGER) action = LogAction.REJECT_REQUEST;
+      
+      logActivity(actor, action, `Request ${requestId} status changed to ${newStatus}`);
+    }
 
     if (newStatus === RequestStatus.PAID) {
         const req = REQUESTS[index];
@@ -1223,6 +1263,7 @@ export const exportDatabase = () => {
     mockInflation: MOCK_INFLATION_RATE, annualBudgets: ANNUAL_BUDGETS,
     currentYearActuals: CURRENT_YEAR_ACTUALS, budgetAnalysisComments: BUDGET_ANALYSIS_COMMENTS,
     projects: MOCK_PROJECTS, services: MOCK_SERVICES, parts: MOCK_PARTS, users: USERS,
+    activityLogs: ACTIVITY_LOGS,
   };
   return JSON.stringify(data, null, 2);
 };
@@ -1250,6 +1291,7 @@ export const importDatabase = async (jsonString: string) => {
     if (data.services) MOCK_SERVICES = data.services;
     if (data.parts) MOCK_PARTS = data.parts;
     if (data.users) USERS = data.users;
+    if (data.activityLogs) ACTIVITY_LOGS = data.activityLogs;
 
     localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
     localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS));
@@ -1271,6 +1313,7 @@ export const importDatabase = async (jsonString: string) => {
     localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES));
     localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS));
     localStorage.setItem('finboard_users', JSON.stringify(USERS));
+    localStorage.setItem('finboard_activity_logs', JSON.stringify(ACTIVITY_LOGS));
 
     window.dispatchEvent(new Event('finboard_sync'));
     return true;
@@ -1300,7 +1343,10 @@ export const updateInvoiceStatus = async (id: string, status: InvoiceStatus): Pr
   if (index !== -1) { INVOICES[index] = { ...INVOICES[index], status }; syncInvoices(); }
 };
 
-export const generateAIReportSummary = async (data: MasterReportData): Promise<string> => {
+export const generateAIReportSummary = async (data: MasterReportData, user?: User): Promise<string> => {
+  if (user) {
+    logActivity(user, LogAction.GENERATE_AI_REPORT, 'AI summary report generated');
+  }
   const summaryData = {
       revenues: data.revenues.map(r => ({ name: r.name, actualAmount: r.actualAmount })),
       fundBalances: data.funds.map(f => ({ name: f.name, remaining: f.remaining })),
