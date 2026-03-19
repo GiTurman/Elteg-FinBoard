@@ -457,6 +457,7 @@ export const EXPENSE_FUNDS: ExpenseFund[] = [
   { id: 'fund_adj_office', name: 'საოფისე და ადმინისტრაციული', description: 'Office & Admin', category: 'Adjustable' },
   { id: 'fund_adj_marketing', name: 'რეკლამა და მარკეტინგის ფონდი', description: 'Ads & Marketing', category: 'Adjustable' },
   { id: 'fund_adj_assets', name: 'ძირითადი საშუალებების', description: 'Fixed Assets', category: 'Adjustable' },
+  { id: 'fund_adj_travel', name: 'სამივლინებო ხარჯები', description: 'Travel Expenses', category: 'Adjustable' },
   { id: 'fund_adj_rep', name: 'წარმომადგენლობითი', description: 'Representation', category: 'Adjustable' },
   { id: 'fund_adj_other', name: 'სხვა ხარჯები', description: 'Other Expenses', category: 'Adjustable' },
   { id: 'fund_special_reserve', name: 'სარეზერვო ფონდი', description: 'Reserve Fund', category: 'Special' },
@@ -465,7 +466,10 @@ export const EXPENSE_FUNDS: ExpenseFund[] = [
 ];
 
 ANNUAL_BUDGETS = {
-  2025: {},
+  2025: {
+    'fund_adj_travel': 0,
+    'fund_adj_rep': -25000,
+  },
   2026: {
     'rev_projects': 3000000,
     'rev_service': 2000000,
@@ -487,6 +491,7 @@ ANNUAL_BUDGETS = {
     'fund_adj_office': -70000,
     'fund_adj_marketing': -90000,
     'fund_adj_assets': -50000,
+    'fund_adj_travel': 0,
     'fund_adj_rep': -30000,
     'fund_adj_other': -20000,
     'fund_special_reserve': -180000,
