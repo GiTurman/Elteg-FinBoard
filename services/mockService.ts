@@ -131,6 +131,7 @@ try {
     console.error("Failed to load users from local storage", e);
 }
 */
+localStorage.removeItem('finboard_users');
 
 REQUESTS = [];
 try {
@@ -1190,7 +1191,7 @@ export const openBoardSession = async (user: User): Promise<BoardSession> => {
   return session;
 };
 
-export const closeBoardSession = async (): Promise<void> => {
+export const closeBoardSession = async (user: User): Promise<BoardSession> => {
     const active = BOARD_SESSIONS.find(s => s.isActive);
     if (active) {
         active.isActive = false;
@@ -1198,6 +1199,9 @@ export const closeBoardSession = async (): Promise<void> => {
     }
     syncBoardSessions();
     localStorage.removeItem('finboard_council_step');
+
+    // Create new session
+    return await openBoardSession(user);
 };
 
 export const saveBoardStep = (step: number): void => {
@@ -1465,7 +1469,7 @@ export const clearArchivedRequests = async (): Promise<void> => {
 // === SUPABASE REALTIME SYNC ===
 const handleInitState = (state: any) => {
   let hasData = false;
-  if (state.users && Object.keys(state.users).length > 0) { for (const key in USERS) delete USERS[key]; Object.assign(USERS, state.users); hasData = true; }
+  // if (state.users && Object.keys(state.users).length > 0) { for (const key in USERS) delete USERS[key]; Object.assign(USERS, state.users); hasData = true; }
   if (state.requests && state.requests.length > 0) { REQUESTS = state.requests; localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS)); hasData = true; }
   if (state.invoices && state.invoices.length > 0) { INVOICES = state.invoices; localStorage.setItem('finboard_invoices', JSON.stringify(INVOICES)); hasData = true; }
   if (state.cwInflow && state.cwInflow.length > 0) { CURRENT_WEEK_CASH_INFLOW = state.cwInflow; localStorage.setItem('finboard_cw_inflow', JSON.stringify(CURRENT_WEEK_CASH_INFLOW)); hasData = true; }

@@ -450,9 +450,9 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
 
   const handleCloseBoard = async () => {
     const weekDate = activeBoardSession?.weekDate || 'N/A';
-    await closeBoardSession();
-    setActiveBoardSession(null);
-    setCurrentStep(0);
+    const newSession = await closeBoardSession(user);
+    setActiveBoardSession(newSession);
+    setCurrentStep(1);
     setSelectedSessionDate(null);
     // Reset report state
     setIsReportGenerated(false);
@@ -1229,7 +1229,10 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                                   <tr key={req.id}>
                                     <td className="px-3 py-2 border-r">{req.requesterName}</td>
                                     <td className="px-3 py-2 border-r">{req.itemName || req.category}</td>
-                                    <td className="px-3 py-2 border-r text-right font-bold">{req.totalAmount.toLocaleString()} {req.currency}</td>
+                                    <td className="px-3 py-2 border-r text-right font-bold">
+                                      {formatNumber(req.totalAmount * (req.currency === Currency.USD ? MOCK_RATES.USD : req.currency === Currency.EUR ? MOCK_RATES.EUR : 1))} GEL
+                                      {req.currency !== Currency.GEL && <div className="text-[9px] text-gray-400">({formatNumber(req.totalAmount)} {req.currency})</div>}
+                                    </td>
                                     <td className="px-3 py-2 border-r">{getFundName(req.assignedFundId)}</td>
                                     <td className="px-3 py-2 border-r text-center">
                                         <div className="flex justify-center items-center gap-2">
@@ -1305,7 +1308,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                                       dispatchedHistory.map(req => (
                                           <tr key={req.id} className="bg-white">
                                               <td className="px-4 py-3 font-bold">{req.itemName || req.category}</td>
-                                              <td className="px-4 py-3 font-mono">{req.totalAmount} {req.currency}</td>
+                                              <td className="px-4 py-3 font-mono">{formatNumber(req.totalAmount * (req.currency === Currency.USD ? MOCK_RATES.USD : req.currency === Currency.EUR ? MOCK_RATES.EUR : 1))} GEL</td>
                                               <td className="px-4 py-3"><span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-bold uppercase">{getFundName(req.assignedFundId)}</span></td>
                                               <td className="px-4 py-3 text-center">
                                                   {req.status === RequestStatus.PAID ? (

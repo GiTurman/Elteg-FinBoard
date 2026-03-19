@@ -405,7 +405,8 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
 
                     {/* Amount */}
                     <td className="px-3 py-3 border-r font-bold font-mono text-right text-red-600 align-top whitespace-nowrap">
-                      -{formatNumber(req.totalAmount)} {req.currency}
+                      -{formatNumber(req.totalAmount * (req.currency === Currency.USD ? MOCK_RATES.USD : req.currency === Currency.EUR ? MOCK_RATES.EUR : 1))} GEL
+                      {req.currency !== Currency.GEL && <div className="text-[9px] text-gray-400">({formatNumber(req.totalAmount)} {req.currency})</div>}
                     </td>
 
                     {/* Fund selector */}
