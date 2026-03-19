@@ -47,21 +47,21 @@ export const useSync = () => {
 USERS = {
   'u_founder': { 
     id: 'u_founder', 
-    name: 'Alexander (Founder)', 
-    email: 'founder@elevators.ge', 
+    name: 'nukri (Founder)', 
+    email: 'nugzar@elteg.ge', 
     role: UserRole.FOUNDER, 
     department: 'Board', 
     managerId: undefined,
-    password: '123'
+    password: '***'
   },
   'u_ceo': { 
     id: 'u_ceo', 
-    name: 'Levan (CEO)', 
-    email: 'ceo@elevators.ge', 
+    name: 'Giorgi Arsenishvili (CEO)', 
+    email: 'g.arsenishvili@elteg.ge', 
     role: UserRole.CEO, 
     department: 'Executive', 
     managerId: 'u_founder',
-    password: '123'
+    password: '***'
   },
   'u_fin': { 
     id: 'u_fin', 
@@ -69,65 +69,57 @@ USERS = {
     email: 'giorgi.turman@gmail.com', 
     role: UserRole.FIN_DIRECTOR, 
     department: 'Finance', 
-    managerId: 'u_ceo',
-    password: '111979'
+    managerId: 'u_founder',
+    password: '***'
   },
   'u_accountant': {
     id: 'u_accountant', 
-    name: 'Natia (Chief Accountant)', 
-    email: 'accountant@elevators.ge', 
+    name: 'Giorgi Belkania (Chief Accountant)', 
+    email: 'gbelkania@elteg.ge', 
     role: UserRole.ACCOUNTANT, 
     department: 'Finance', 
     managerId: 'u_fin',
-    password: '123'
+    password: '***'
   },
   'u_sub_accountant': {
     id: 'u_sub_accountant',
-    name: 'Ana (Accountant)',
-    email: 'sub_accountant@elevators.ge',
+    name: 'Lasha Berianidze (Accountant)',
+    email: 'lberianidze@elteg.ge',
     role: UserRole.SUB_ACCOUNTANT,
     department: 'Finance',
     managerId: 'u_accountant',
-    password: '123'
+    password: '***'
   },
   'u_comm_dir': { 
     id: 'u_comm_dir', 
-    name: 'Nino (Commercial Dir)', 
-    email: 'comm@elevators.ge', 
+    name: 'Aleksandre Lapheradze (Commercial Dir)', 
+    email: 'a.laperadzeelteg@gmail.com', 
     role: UserRole.COMMERCIAL_DIRECTOR, 
     department: 'Commercial', 
     managerId: 'u_ceo',
-    password: '123'
+    password: '***'
   },
   'u_tech_dir': { 
     id: 'u_tech_dir', 
-    name: 'Vakho (Tech Director)', 
-    email: 'tech@elevators.ge', 
+    name: 'Ivane Zirakashvili (Tech Director)', 
+    email: 'i.zirakashvili@elteg.ge', 
     role: UserRole.TECH_DIRECTOR, 
     department: 'Technical', 
     managerId: 'u_ceo',
-    password: '123'
+    password: '***'
   },
   'u_admin_mgr': { 
     id: 'u_admin_mgr', 
-    name: 'Mariam (Admin Manager)', 
-    email: 'admin@elevators.ge', 
+    name: 'Lea Labadze (Admin Manager)', 
+    email: 'llabadze@elteg.ge', 
     role: UserRole.ADMIN, 
     department: 'Administration', 
     managerId: 'u_ceo',
-    password: '123'
-  },
-  'u_parts_mgr': {
-    id: 'u_parts_mgr',
-    name: 'Gia (Parts Manager)',
-    email: 'parts@elevators.ge',
-    role: UserRole.PARTS_MANAGER,
-    department: 'Procurement & Parts',
-    managerId: 'u_tech_dir',
-    password: '123'
+    password: '***'
   }
 };
 
+/*
 try {
     const storedUsers = localStorage.getItem('finboard_users');
     if (storedUsers) {
@@ -138,6 +130,7 @@ try {
 } catch(e) {
     console.error("Failed to load users from local storage", e);
 }
+*/
 
 REQUESTS = [];
 try {
