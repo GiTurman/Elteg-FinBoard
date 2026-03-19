@@ -310,6 +310,13 @@ export const Layout: React.FC<LayoutProps> = ({
                         isExpanded={isSidebarExpanded} 
                       />
                       <NavItem 
+                        icon={TrendingUp} 
+                        label="2026 ფაქტი" 
+                        active={activeTab === 'budget-fact'} 
+                        onClick={() => setActiveTab('budget-fact')}
+                        isExpanded={isSidebarExpanded} 
+                      />
+                      <NavItem 
                         icon={Scale} 
                         label="ბიუჯეტის ანალიზი"
                         active={activeTab === 'budget-analysis'} 

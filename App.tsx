@@ -9,6 +9,7 @@ import { FinancialCouncil } from './components/FinancialCouncil'; // New Import
 import { AccountingDashboard, AccountantDirectivesView } from './components/AccountingDashboard';
 import { GlobalArchive } from './components/GlobalArchive';
 import { Budgeting } from './components/Budgeting'; // PROMPT 414
+import { BudgetFact } from './components/BudgetFact';
 import { BudgetAnalysis } from './components/BudgetAnalysis'; // PROMPT 7.3-008
 import { CashInflowView } from './components/CashInflowView'; // PROMPT 6.1-006
 import { GlobalSettings } from './components/GlobalSettings'; // PROMPT 6.2-009
@@ -155,6 +156,9 @@ function App() {
         )}
         {activeTab === 'curr-year-budget' && (
           isTopLevel ? <Budgeting user={currentUser} year={2026} /> : <AccessDenied />
+        )}
+        {activeTab === 'budget-fact' && (
+          isTopLevel ? <BudgetFact user={currentUser} year={2026} /> : <AccessDenied />
         )}
         {activeTab === 'budget-analysis' && (
           isTopLevel ? <BudgetAnalysis user={currentUser} /> : <AccessDenied />

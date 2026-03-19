@@ -108,17 +108,32 @@ export const Budgeting: React.FC<BudgetingProps> = ({ user, year }) => {
 
       // 2. მომხმარებლის მიერ ხელით შესწორებული მონაცემების წამოღება
       const savedMonthlyEdits = JSON.parse(localStorage.getItem(`finboard_budget_months_${year}`) || '{}');
+      const savedMonthlyFacts = JSON.parse(localStorage.getItem(`finboard_budget_facts_${year}`) || '{}');
       
       processedCurrentData = processedCurrentData.map((item: any) => {
+          let updatedItem = { ...item };
+          
+          // Apply plan edits
           if (savedMonthlyEdits[item.id]) {
-              const newMonthlyData = item.monthlyData.map((m: any, i: number) => ({
+              const newMonthlyData = updatedItem.monthlyData.map((m: any, i: number) => ({
                   ...m,
                   plan: savedMonthlyEdits[item.id][i]
               }));
               const newPlannedAmount = newMonthlyData.reduce((sum: number, m: any) => sum + m.plan, 0);
-              return { ...item, monthlyData: newMonthlyData, plannedAmount: newPlannedAmount };
+              updatedItem = { ...updatedItem, monthlyData: newMonthlyData, plannedAmount: newPlannedAmount };
           }
-          return item;
+
+          // Apply fact edits
+          if (savedMonthlyFacts[item.id]) {
+              const newMonthlyData = updatedItem.monthlyData.map((m: any, i: number) => ({
+                  ...m,
+                  fact: savedMonthlyFacts[item.id][i]
+              }));
+              const newActualAmount = newMonthlyData.reduce((sum: number, m: any) => sum + m.fact, 0);
+              updatedItem = { ...updatedItem, monthlyData: newMonthlyData, actualAmount: newActualAmount };
+          }
+          
+          return updatedItem;
       });
 
       setBudgetData(processedCurrentData);
