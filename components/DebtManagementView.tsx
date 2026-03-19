@@ -12,6 +12,7 @@ import {
     updateCreditor, 
     addDebtor, 
     addCreditor,
+    resetDebts,
     useSync
 } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
@@ -325,6 +326,7 @@ export const DebtManagementView: React.FC = () => {
                 მუშაობა დავალიანებებთან
             </h2>
             <div className="flex gap-2">
+              <button onClick={async () => { if(confirm('დარწმუნებული ხართ, რომ გსურთ ყველა დებიტორისა და კრედიტორის განულება?')) { await resetDebts(); await fetchData(); } }} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors shadow-sm rounded">განულება</button>
               <button onClick={() => setIsAnalysisModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-black text-xs font-bold uppercase tracking-wider hover:bg-gray-100 shadow-sm rounded"><BarChart2 size={16} /> ანალიზი</button>
               <button onClick={handleAddNewClick} disabled={isAdding} className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-black text-xs font-bold uppercase tracking-wider hover:bg-gray-100 transition-colors shadow-sm rounded disabled:bg-gray-200 disabled:cursor-not-allowed"><Plus size={16} /> ჩანაწერის დამატება</button>
               <button onClick={triggerFileUpload} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-blue-700 transition-colors shadow-sm rounded"><Upload size={16} /> ექსელის შეტვირთვა</button>

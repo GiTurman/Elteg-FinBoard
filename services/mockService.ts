@@ -389,6 +389,7 @@ const syncDebts = () => {
     localStorage.setItem('finboard_creditors', JSON.stringify(CREDITORS));
     safeEmit('update_state', { key: 'debtors', value: DEBTORS });
     safeEmit('update_state', { key: 'creditors', value: CREDITORS });
+    window.dispatchEvent(new Event('finboard_sync'));
 }
 
 BANK_ACCOUNTS = [
@@ -654,6 +655,11 @@ export const updateCreditor = async (id: string, updates: Partial<DebtRecord>): 
 };
 export const addDebtor = async (record: DebtRecord): Promise<void> => { DEBTORS.unshift(record); syncDebts(); };
 export const addCreditor = async (record: DebtRecord): Promise<void> => { CREDITORS.unshift(record); syncDebts(); };
+export const resetDebts = async (): Promise<void> => {
+  DEBTORS = [];
+  CREDITORS = [];
+  syncDebts();
+};
 
 export const getCurrentWeekCashInflow = async (user: User): Promise<CashInflowRecord[]> => {
   const isTopLevel = [UserRole.FOUNDER, UserRole.FIN_DIRECTOR, UserRole.CEO].includes(user.role);
