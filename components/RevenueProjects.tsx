@@ -3,8 +3,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ProjectRevenue, ProjectTranche, Currency } from '../types';
 import { getProjects, addProject, updateProject, terminateProject, getCurrencyRates, useSync } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
-import { FolderKanban, Plus, Download, Edit2, ChevronDown, ChevronRight, Save, X, Trash2, AlertTriangle, Archive } from 'lucide-react';
+import { FolderKanban, Plus, Download, Upload, Edit2, ChevronDown, ChevronRight, Save, X, Trash2, AlertTriangle, Archive } from 'lucide-react';
 import { exportGenericToExcel } from '../utils/excelExport';
+import * as XLSX from 'xlsx';
 
 const MONTH_NAMES_GE = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
 const CURRENT_YEAR = 2026;
@@ -240,6 +241,86 @@ export const RevenueProjects: React.FC = () => {
         setIsModalOpen(true);
     };
 
+    const downloadTemplate = () => {
+        const headers = [
+            'დამკვეთი', 'გაფ. თარიღი (YYYY-MM-DD)', 'კონტრაქტი N', 'ვადა (კვირა)', 'პროდ. ტიპი', 'ბრენდი', 'პროდუქცია', 'ერთეული', 
+            'სართ. რაოდენობა', 'რაოდენობა', 'ღირებულება', 'ვალუტა (GEL/USD/EUR)', 'სულ მიღებული',
+            'T1 %', 'T1 თვე (1-12)', 'T1 წელი',
+            'T2 %', 'T2 თვე (1-12)', 'T2 წელი',
+            'T3 %', 'T3 თვე (1-12)', 'T3 წელი',
+            'T4 %', 'T4 თვე (1-12)', 'T4 წელი'
+        ];
+        const sampleData = [
+            ['Sample Client', '2026-01-01', 'PRJ-001', 12, 'ლიფტი', 'Brand A', 'Model X', 'ცალი', 5, 1, 50000, 'GEL', 0, 30, 1, 2026, 40, 3, 2026, 30, 6, 2026, '', '', '']
+        ];
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Template");
+        XLSX.writeFile(wb, "Project_Revenue_Template.xlsx");
+    };
+
+    const handleImportXLSX = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const data = new Uint8Array(event.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+                const rows = jsonData.slice(1);
+                
+                for (const row of rows) {
+                    if (!row[0]) continue;
+
+                    const tranches: ProjectTranche[] = [];
+                    for (let i = 0; i < 4; i++) {
+                        const baseIdx = 13 + (i * 3);
+                        const pct = parseFloat(row[baseIdx]);
+                        if (!isNaN(pct) && pct > 0) {
+                            tranches.push({
+                                id: `tr_${Date.now()}_${i}`,
+                                percentage: pct,
+                                month: (parseInt(row[baseIdx + 1]) || 1) - 1,
+                                year: parseInt(row[baseIdx + 2]) || CURRENT_YEAR
+                            });
+                        }
+                    }
+
+                    const projectData: Omit<ProjectRevenue, 'id' | 'status'> = {
+                        clientName: String(row[0] || ''),
+                        contractDate: String(row[1] || new Date().toISOString().split('T')[0]),
+                        contractNumber: String(row[2] || ''),
+                        durationInWeeks: parseFloat(row[3]) || 1,
+                        productType: String(row[4] || ''),
+                        brand: String(row[5] || ''),
+                        product: String(row[6] || ''),
+                        unit: String(row[7] || ''),
+                        numberOfFloors: parseFloat(row[8]) || 1,
+                        quantity: parseFloat(row[9]) || 1,
+                        value: parseFloat(row[10]) || 0,
+                        currency: (row[11] as Currency) || Currency.GEL,
+                        totalReceived: parseFloat(row[12]) || 0,
+                        tranches: tranches.length > 0 ? tranches : [{ id: `tr_${Date.now()}`, percentage: 100, month: 0, year: CURRENT_YEAR }]
+                    };
+
+                    await addProject(projectData);
+                }
+                fetchData();
+                alert('იმპორტი წარმატებით დასრულდა');
+            } catch (err) {
+                console.error('Import error:', err);
+                alert('შეცდომა იმპორტისას. შეამოწმეთ ფაილის ფორმატი.');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        e.target.value = '';
+    };
+
     const toggleBlock = (block: string) => {
         setCollapsedBlocks(prev => ({ ...prev, [block]: !prev[block] }));
     };
@@ -425,8 +506,19 @@ export const RevenueProjects: React.FC = () => {
                 <div className="flex justify-between items-center">
                     <h2 className="text-2xl font-bold flex items-center gap-3"><FolderKanban size={24}/> პროექტები</h2>
                     <div className="flex gap-2">
-                        <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm"><Plus size={16}/> პროექტის დამატება</button>
-                        <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm"><Download size={16}/> ექსპორტი</button>
+                        <button onClick={() => downloadTemplate()} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-gray-700 transition-colors">
+                            <Download size={16}/> შაბლონი
+                        </button>
+                        <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-blue-700 transition-colors cursor-pointer">
+                            <Upload size={16}/> იმპორტი
+                            <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportXLSX} />
+                        </label>
+                        <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-gray-900 transition-colors">
+                            <Plus size={16}/> პროექტის დამატება
+                        </button>
+                        <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-green-700 transition-colors">
+                            <Download size={16}/> ექსპორტი
+                        </button>
                     </div>
                 </div>
 
