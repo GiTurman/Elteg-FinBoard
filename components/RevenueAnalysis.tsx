@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Download, BarChart2, AlertTriangle, Server, FolderKanban, Plus, Edit2, ChevronDown, ChevronRight, X, Trash2, Package, Archive } from 'lucide-react';
+import { Download, Upload, BarChart2, AlertTriangle, Server, FolderKanban, Plus, Edit2, ChevronDown, ChevronRight, X, Trash2, Package, Archive } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { RevenueProjects } from './RevenueProjects';
 import { ServiceRevenue, PartRevenue, ProjectTranche, Currency } from '../types';
 import { getServices, addService, updateService, terminateService, getParts, addPart, updatePart, terminatePart, getCurrencyRates, useSync } from '../services/mockService';
@@ -184,6 +185,88 @@ export const RevenueService: React.FC = () => {
     const handleOpenModal = (service: ServiceRevenue | null = null) => { setEditingService(service); setIsModalOpen(true); };
     const handleConfirmTermination = async (date: string, reason: string) => { if (!terminatingService) return; await terminateService(terminatingService.id, date, reason); setIsTerminationModalOpen(false); setTerminatingService(null); fetchData(); };
     
+    const downloadTemplate = () => {
+        const headers = [
+            'დამკვეთი', 'გაფ. თარიღი (YYYY-MM-DD)', 'კონტრაქტი N', 'პროდ. ტიპი', 'ბრენდი', 'პროდუქცია', 'ერთეული', 
+            'რაოდენობა', 'ღირებულება', 'ვალუტა (GEL/USD/EUR)', 'სართ/გაჩერება', 'ვადა (კვირა)', 'სულ მიღებული',
+            'T1 %', 'T1 თვე (1-12)', 'T1 წელი',
+            'T2 %', 'T2 თვე (1-12)', 'T2 წელი',
+            'T3 %', 'T3 თვე (1-12)', 'T3 წელი',
+            'T4 %', 'T4 თვე (1-12)', 'T4 წელი'
+        ];
+        const sampleData = [
+            ['Sample Client', '2026-01-01', 'CNT-001', 'მომსახურება', 'Generic', 'Service A', 'თვე', 12, 12000, 'GEL', 1, 52, 0, 100, 1, 2026, '', '', '', '', '', '', '', '', '']
+        ];
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Template");
+        XLSX.writeFile(wb, "Service_Revenue_Template.xlsx");
+    };
+
+    const handleImportXLSX = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const data = new Uint8Array(event.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+                // Skip header row
+                const rows = jsonData.slice(1);
+                
+                for (const row of rows) {
+                    if (!row[0]) continue; // Skip empty rows
+
+                    const tranches: ProjectTranche[] = [];
+                    // Process up to 4 tranches
+                    for (let i = 0; i < 4; i++) {
+                        const baseIdx = 13 + (i * 3);
+                        const pct = parseFloat(row[baseIdx]);
+                        if (!isNaN(pct) && pct > 0) {
+                            tranches.push({
+                                id: `tr_${Date.now()}_${i}`,
+                                percentage: pct,
+                                month: (parseInt(row[baseIdx + 1]) || 1) - 1, // 1-12 to 0-11
+                                year: parseInt(row[baseIdx + 2]) || CURRENT_YEAR
+                            });
+                        }
+                    }
+
+                    const serviceData: Omit<ServiceRevenue, 'id' | 'status'> = {
+                        clientName: String(row[0] || ''),
+                        contractDate: String(row[1] || new Date().toISOString().split('T')[0]),
+                        contractNumber: String(row[2] || ''),
+                        productType: String(row[3] || 'მომსახურება'),
+                        brand: String(row[4] || ''),
+                        product: String(row[5] || ''),
+                        unit: String(row[6] || 'თვე'),
+                        quantity: parseFloat(row[7]) || 0,
+                        value: parseFloat(row[8]) || 0,
+                        currency: (row[9] as Currency) || Currency.GEL,
+                        floorsOrStops: parseFloat(row[10]) || 0,
+                        durationInWeeks: parseFloat(row[11]) || 52,
+                        totalReceived: parseFloat(row[12]) || 0,
+                        tranches: tranches.length > 0 ? tranches : [{ id: `tr_${Date.now()}`, percentage: 100, month: 0, year: CURRENT_YEAR }]
+                    };
+
+                    await addService(serviceData);
+                }
+                fetchData();
+                alert('იმპორტი წარმატებით დასრულდა');
+            } catch (err) {
+                console.error('Import error:', err);
+                alert('შეცდომა იმპორტისას. შეამოწმეთ ფაილის ფორმატი.');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        e.target.value = ''; // Reset input
+    };
+
     const toggleBlock = (block: string) => setCollapsedBlocks(prev => ({ ...prev, [block]: !prev[block] }));
     const getRate = (currency: Currency) => (currency === 'USD' ? rates.USD : currency === 'EUR' ? rates.EUR : 1);
 
@@ -198,7 +281,49 @@ export const RevenueService: React.FC = () => {
             <ServiceModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveService} initialData={editingService} />
             <TerminationModal isOpen={isTerminationModalOpen} onClose={() => setIsTerminationModalOpen(false)} onConfirm={handleConfirmTermination} />
             <div className="space-y-4">
-                <div className="flex justify-between items-center"><h2 className="text-2xl font-bold flex items-center gap-3"><Server size={24}/> სერვისი</h2><div className="flex gap-2"><button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm"><Plus size={16}/> სერვისის დამატება</button><button disabled className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm disabled:opacity-50"><Download size={16}/> ექსპორტი</button></div></div>
+                <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold flex items-center gap-3"><Server size={24}/> სერვისი</h2>
+                    <div className="flex gap-2">
+                        <button onClick={() => downloadTemplate()} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-gray-700 transition-colors">
+                            <Download size={16}/> შაბლონი
+                        </button>
+                        <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-blue-700 transition-colors cursor-pointer">
+                            <Upload size={16}/> იმპორტი
+                            <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportXLSX} />
+                        </label>
+                        <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-gray-900 transition-colors">
+                            <Plus size={16}/> სერვისის დამატება
+                        </button>
+                        <button 
+                            onClick={() => {
+                                const headers = {
+                                    clientName: 'დამკვეთი',
+                                    contractDate: 'გაფ. თარიღი',
+                                    contractNumber: 'კონტრაქტი N',
+                                    productType: 'პროდ. ტიპი',
+                                    brand: 'ბრენდი',
+                                    product: 'პროდუქცია',
+                                    unit: 'ერთეული',
+                                    quantity: 'რაოდენობა',
+                                    value: 'ღირებულება',
+                                    currency: 'ვალუტა',
+                                    floorsOrStops: 'სართ/გაჩერება',
+                                    durationInWeeks: 'ვადა (კვირა)',
+                                    totalReceived: 'სულ მიღებული',
+                                    priceAnalysisUnitPrice: 'ერთ. ღირ.',
+                                    priceAnalysisFloorPrice: 'სართ. ღირ.',
+                                    priceAnalysisWeeklyPrice: 'კვირ. ღირ.',
+                                    priceAnalysisMonthlyPrice: 'თვის. ღირ.',
+                                    status: 'სტატუსი'
+                                };
+                                exportGenericToExcel(processedServices, headers, 'Services', `Services_Revenue_${CURRENT_YEAR}`);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-green-700 transition-colors"
+                        >
+                            <Download size={16}/> ექსპორტი
+                        </button>
+                    </div>
+                </div>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm" style={{maxHeight: '75vh'}}>
                     <table className="w-full text-xs text-left">
                         <thead className="sticky top-0 z-20"><tr className="bg-amber-100 text-amber-800 font-bold uppercase">{['A. დეტალიზაცია','B. გრაფიკი','E. ფასის ანალიზი','C. ანალიზი',`D. შემოსავალი (${CURRENT_YEAR})`].map((h, i)=>(<th key={h} className={`px-2 py-1.5 ${i > 0 && 'border-l border-amber-200'}`} colSpan={i === 0 ? 11 : i === 3 ? 4 : i === 4 ? 12 : 4}><button onClick={()=>toggleBlock(h[0])} className="flex items-center gap-1 w-full text-xs">{h} {collapsedBlocks[h[0]]?<ChevronRight size={14}/>:<ChevronDown size={14}/>}</button></th>))}<th className="bg-amber-100"></th></tr><tr className="bg-sky-100 text-sky-800 font-bold uppercase"><th className="px-2 py-1 sticky left-0 bg-sky-100 z-30">დამკვეთი</th>{!collapsedBlocks['A']&&<><th className="px-2 py-1">გაფ. თარიღი</th><th className="px-2 py-1">კონტრაქტი N</th><th className="px-2 py-1">პროდ. ტიპი</th><th className="px-2 py-1">ბრენდი</th><th className="px-2 py-1">პროდუქცია</th><th className="px-2 py-1">ერთ.</th><th className="px-2 py-1">რაოდ.</th><th className="px-2 py-1 text-right">ღირებულება</th><th className="px-2 py-1">ვალუტა</th><th className="px-2 py-1">სართ/გაჩერება</th></>}{!collapsedBlocks['B']&&<><th className="px-2 py-1 text-center border-l border-sky-200">I %</th><th className="px-2 py-1 text-center">II %</th><th className="px-2 py-1 text-center">III %</th><th className="px-2 py-1 text-center">IV %</th></>}{!collapsedBlocks['E']&&<><th className="px-2 py-1 text-right border-l border-sky-200">ერთ. ღირ.</th><th className="px-2 py-1 text-right">სართ. ღირ.</th><th className="px-2 py-1 text-right">კვირ. ღირ.</th><th className="px-2 py-1 text-right">თვის. ღირ.</th></>}{!collapsedBlocks['C']&&<><th className="px-2 py-1 text-right border-l border-sky-200">სულ მისაღები</th><th className="px-2 py-1 text-right">სულ მიღებული</th><th className="px-2 py-1 text-right">დარჩენილი (GEL)</th><th className="px-2 py-1 w-28">დარჩენილი %</th></>}{!collapsedBlocks['D']&&MONTH_NAMES_GE.map(m=><th key={m} className="px-2 py-1 text-right border-l border-sky-200 w-24">{m}</th>)}<th className="px-2 py-1 w-20"></th></tr></thead>
@@ -330,6 +455,86 @@ export const RevenueParts: React.FC = () => {
     const handleOpenModal = (part: PartRevenue | null = null) => { setEditingPart(part); setIsModalOpen(true); };
     const handleConfirmTermination = async (date: string, reason: string) => { if (!terminatingPart) return; await terminatePart(terminatingPart.id, date, reason); setIsTerminationModalOpen(false); setTerminatingPart(null); fetchData(); };
 
+    const downloadTemplate = () => {
+        const headers = [
+            'დამკვეთი', 'გაფ. თარიღი (YYYY-MM-DD)', 'კონტრაქტი N', 'პროდ. ტიპი', 'ბრენდი', 'პროდუქცია', 'ერთეული', 
+            'რაოდენობა', 'ღირებულება', 'ვალუტა (GEL/USD/EUR)', 'სართ/გაჩერება', 'მიწოდების ვადა (კვირა)', 'სულ მიღებული',
+            'T1 %', 'T1 თვე (1-12)', 'T1 წელი',
+            'T2 %', 'T2 თვე (1-12)', 'T2 წელი',
+            'T3 %', 'T3 თვე (1-12)', 'T3 წელი',
+            'T4 %', 'T4 თვე (1-12)', 'T4 წელი'
+        ];
+        const sampleData = [
+            ['Sample Client', '2026-01-01', 'PRT-001', 'ნაწილი', 'Brand X', 'Part A', 'ცალი', 5, 5000, 'GEL', 0, 2, 0, 100, 1, 2026, '', '', '', '', '', '', '', '', '']
+        ];
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Template");
+        XLSX.writeFile(wb, "Parts_Revenue_Template.xlsx");
+    };
+
+    const handleImportXLSX = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const data = new Uint8Array(event.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+                const rows = jsonData.slice(1);
+                
+                for (const row of rows) {
+                    if (!row[0]) continue;
+
+                    const tranches: ProjectTranche[] = [];
+                    for (let i = 0; i < 4; i++) {
+                        const baseIdx = 13 + (i * 3);
+                        const pct = parseFloat(row[baseIdx]);
+                        if (!isNaN(pct) && pct > 0) {
+                            tranches.push({
+                                id: `tr_${Date.now()}_${i}`,
+                                percentage: pct,
+                                month: (parseInt(row[baseIdx + 1]) || 1) - 1,
+                                year: parseInt(row[baseIdx + 2]) || CURRENT_YEAR
+                            });
+                        }
+                    }
+
+                    const partData: Omit<PartRevenue, 'id' | 'status'> = {
+                        clientName: String(row[0] || ''),
+                        contractDate: String(row[1] || new Date().toISOString().split('T')[0]),
+                        contractNumber: String(row[2] || ''),
+                        productType: String(row[3] || 'ნაწილი'),
+                        brand: String(row[4] || ''),
+                        product: String(row[5] || ''),
+                        unit: String(row[6] || 'ცალი'),
+                        quantity: parseFloat(row[7]) || 0,
+                        value: parseFloat(row[8]) || 0,
+                        currency: (row[9] as Currency) || Currency.GEL,
+                        floorsOrStops: parseFloat(row[10]) || 0,
+                        durationInWeeks: parseFloat(row[11]) || 2,
+                        totalReceived: parseFloat(row[12]) || 0,
+                        tranches: tranches.length > 0 ? tranches : [{ id: `tr_${Date.now()}`, percentage: 100, month: 0, year: CURRENT_YEAR }]
+                    };
+
+                    await addPart(partData);
+                }
+                fetchData();
+                alert('იმპორტი წარმატებით დასრულდა');
+            } catch (err) {
+                console.error('Import error:', err);
+                alert('შეცდომა იმპორტისას. შეამოწმეთ ფაილის ფორმატი.');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        e.target.value = '';
+    };
+
     const toggleBlock = (block: string) => setCollapsedBlocks(prev => ({ ...prev, [block]: !prev[block] }));
     const getRate = (currency: Currency) => (currency === 'USD' ? rates.USD : currency === 'EUR' ? rates.EUR : 1);
 
@@ -344,7 +549,46 @@ export const RevenueParts: React.FC = () => {
             <PartModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSavePart} initialData={editingPart} />
             <TerminationModal isOpen={isTerminationModalOpen} onClose={() => setIsTerminationModalOpen(false)} onConfirm={handleConfirmTermination} />
             <div className="space-y-4">
-                <div className="flex justify-between items-center"><h2 className="text-2xl font-bold flex items-center gap-3"><Package size={24}/> ნაწილები</h2><div className="flex gap-2"><button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm"><Plus size={16}/> + ნაწილის დამატება</button><button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm"><Download size={16}/> ექსპორტი</button></div></div>
+                <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold flex items-center gap-3"><Package size={24}/> ნაწილები</h2>
+                    <div className="flex gap-2">
+                        <button onClick={() => downloadTemplate()} className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-gray-700 transition-colors">
+                            <Download size={16}/> შაბლონი
+                        </button>
+                        <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-blue-700 transition-colors cursor-pointer">
+                            <Upload size={16}/> იმპორტი
+                            <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportXLSX} />
+                        </label>
+                        <button onClick={() => handleOpenModal()} className="flex items-center gap-2 px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-gray-900 transition-colors">
+                            <Plus size={16}/> + ნაწილის დამატება
+                        </button>
+                        <button 
+                            onClick={() => {
+                                const headers = {
+                                    clientName: 'დამკვეთი',
+                                    contractDate: 'გაფ. თარიღი',
+                                    contractNumber: 'კონტრაქტი N',
+                                    productType: 'პროდ. ტიპი',
+                                    brand: 'ბრენდი',
+                                    product: 'პროდუქცია',
+                                    unit: 'ერთეული',
+                                    quantity: 'რაოდენობა',
+                                    value: 'ღირებულება',
+                                    currency: 'ვალუტა',
+                                    floorsOrStops: 'სართ/გაჩერება',
+                                    durationInWeeks: 'მიწოდების ვადა (კვირა)',
+                                    totalReceived: 'სულ მიღებული',
+                                    priceAnalysisUnitPrice: 'ერთ. ღირ.',
+                                    status: 'სტატუსი'
+                                };
+                                exportGenericToExcel(processedParts, headers, 'Parts', `Parts_Revenue_${CURRENT_YEAR}`);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-bold uppercase tracking-wider rounded shadow-sm hover:bg-green-700 transition-colors"
+                        >
+                            <Download size={16}/> ექსპორტი
+                        </button>
+                    </div>
+                </div>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm" style={{maxHeight: '75vh'}}>
                     <table className="w-full text-xs text-left">
                         <thead className="sticky top-0 z-20"><tr className="bg-amber-100 text-amber-800 font-bold uppercase">{['A. დეტალიზაცია','B. გრაფიკი','E. ფასის ანალიზი','C. ანალიზი',`D. შემოსავალი (${CURRENT_YEAR})`].map((h, i)=>(<th key={h} className={`px-2 py-1.5 ${i > 0 && 'border-l border-amber-200'}`} colSpan={i === 0 ? 11 : i === 3 ? 4 : i === 4 ? 12 : i === 2 ? 1 : 4}><button onClick={()=>toggleBlock(h[0])} className="flex items-center gap-1 w-full text-xs">{h} {collapsedBlocks[h[0]]?<ChevronRight size={14}/>:<ChevronDown size={14}/>}</button></th>))}<th className="bg-amber-100"></th></tr><tr className="bg-sky-100 text-sky-800 font-bold uppercase"><th className="px-2 py-1 sticky left-0 bg-sky-100 z-30">დამკვეთი</th>{!collapsedBlocks['A']&&<><th className="px-2 py-1">გაფ. თარიღი</th><th className="px-2 py-1">კონტრაქტი N</th><th className="px-2 py-1">პროდ. ტიპი</th><th className="px-2 py-1">ბრენდი</th><th className="px-2 py-1">პროდუქცია</th><th className="px-2 py-1">ერთ.</th><th className="px-2 py-1">რაოდ.</th><th className="px-2 py-1 text-right">ღირებულება</th><th className="px-2 py-1">ვალუტა</th><th className="px-2 py-1">სართ/გაჩერება</th></>}{!collapsedBlocks['B']&&<><th className="px-2 py-1 text-center border-l border-sky-200">I %</th><th className="px-2 py-1 text-center">II %</th><th className="px-2 py-1 text-center">III %</th><th className="px-2 py-1 text-center">IV %</th></>}{!collapsedBlocks['E']&&<><th className="px-2 py-1 text-right border-l border-sky-200">ერთ. ღირ.</th></>}{!collapsedBlocks['C']&&<><th className="px-2 py-1 text-right border-l border-sky-200">სულ მისაღები</th><th className="px-2 py-1 text-right">სულ მიღებული</th><th className="px-2 py-1 text-right">დარჩენილი (GEL)</th><th className="px-2 py-1 w-28">დარჩენილი %</th></>}{!collapsedBlocks['D']&&MONTH_NAMES_GE.map(m=><th key={m} className="px-2 py-1 text-right border-l border-sky-200 w-24">{m}</th>)}<th className="px-2 py-1 w-20"></th></tr></thead>
