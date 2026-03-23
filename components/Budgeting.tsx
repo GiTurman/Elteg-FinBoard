@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole } from '../types';
 import { getAnnualBudget, updateAnnualBudget, getHiddenFunds, toggleFundVisibility, toggleSectionVisibility, useSync } from '../services/mockService';
-import { TrendingUp, History, Lock, Edit, CheckSquare, Eye, EyeOff } from 'lucide-react';
+import { TrendingUp, History, Lock, Edit, CheckSquare, Eye, EyeOff, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { formatNumber } from '../utils/formatters';
 
 interface BudgetingProps {
@@ -148,6 +149,30 @@ export const Budgeting: React.FC<BudgetingProps> = ({ user, year }) => {
   const handleToggleFundVisibility = async (fundId: string) => {
     await toggleFundVisibility(fundId);
     setHiddenFunds(prev => ({ ...prev, [fundId]: !prev[fundId] }));
+  };
+
+  const exportToExcel = () => {
+    const dataToExport = budgetData.map(item => {
+      const row: any = {
+        'დასახელება': item.name,
+        'ტიპი': item.type === 'revenue' ? 'შემოსავალი' : 'ხარჯი',
+        'კატეგორია': item.category,
+        'წლიური გეგმა': item.plannedAmount,
+        'წლიური ფაქტი': item.actualAmount,
+      };
+      
+      item.monthlyData.forEach((m: any, i: number) => {
+        row[`${MONTH_NAMES[i]} (გეგმა)`] = m.plan;
+        row[`${MONTH_NAMES[i]} (ფაქტი)`] = m.fact;
+      });
+      
+      return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Budget");
+    XLSX.writeFile(workbook, `Budget_${year}.xlsx`);
   };
 
   const handleToggleSectionVisibility = async (category: string) => {
@@ -497,6 +522,12 @@ export const Budgeting: React.FC<BudgetingProps> = ({ user, year }) => {
                         </button>
                     ))}
                 </div>
+                <button 
+                    onClick={exportToExcel}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+                >
+                    <Download size={14} /> XLSX ექსპორტი
+                </button>
            </div>
       </div>
       

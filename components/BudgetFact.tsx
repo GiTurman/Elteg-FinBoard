@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { getAnnualBudget, useSync } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
-import { Save } from 'lucide-react';
+import { Save, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface BudgetFactProps {
   user: User;
@@ -62,18 +63,48 @@ export const BudgetFact: React.FC<BudgetFactProps> = ({ user, year }) => {
     alert('მონაცემები შენახულია');
   };
 
+  const exportToExcel = () => {
+    const MONTH_NAMES = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
+    const dataToExport = budgetData.map(item => {
+      const row: any = {
+        'დასახელება': item.name,
+        'ტიპი': item.type === 'revenue' ? 'შემოსავალი' : 'ხარჯი',
+        'კატეგორია': item.category,
+      };
+      
+      item.monthlyData.forEach((m: any, i: number) => {
+        row[`${MONTH_NAMES[i]} (ფაქტი)`] = m.fact;
+      });
+      
+      return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Budget Fact");
+    XLSX.writeFile(workbook, `Budget_Fact_${year}.xlsx`);
+  };
+
   if (loading) return <div className="p-12 text-center text-gray-400">იტვირთება...</div>;
 
   return (
     <div className="space-y-6 animate-in fade-in">
       <div className="flex justify-between items-center border-b border-black pb-4">
         <h1 className="text-2xl font-extrabold uppercase tracking-tight">2026 ფაქტი</h1>
-        <button 
-          onClick={handleSaveFacts}
-          className="flex items-center gap-2 px-5 py-2.5 bg-black text-white text-sm font-bold rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          <Save size={16} /> შენახვა
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+          >
+            <Download size={16} /> XLSX ექსპორტი
+          </button>
+          <button 
+            onClick={handleSaveFacts}
+            className="flex items-center gap-2 px-5 py-2.5 bg-black text-white text-sm font-bold rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            <Save size={16} /> შენახვა
+          </button>
+        </div>
       </div>
 
       <div className="border rounded-lg shadow-sm border-gray-200 overflow-x-auto">

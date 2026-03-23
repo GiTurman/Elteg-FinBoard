@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole } from '../types';
 import { getAnnualBudget, getBudgetAnalysisComments, updateBudgetAnalysisComment, useSync } from '../services/mockService';
-import { Scale, TrendingUp, TrendingDown } from 'lucide-react';
+import { Scale, TrendingUp, TrendingDown, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { formatNumber } from '../utils/formatters';
 
 interface BudgetAnalysisProps {
@@ -77,6 +78,24 @@ export const BudgetAnalysis: React.FC<BudgetAnalysisProps> = ({ user }) => {
 
   const handleCommentSave = async (id: string) => {
     await updateBudgetAnalysisComment(id, comments[id] || '');
+  };
+
+  const exportToExcel = () => {
+    const dataToExport = comparisonData.map(item => ({
+      'დასახელება': item.name,
+      'ტიპი': item.type === 'revenue' ? 'შემოსავალი' : 'ხარჯი',
+      'კატეგორია': item.category,
+      'ბიუჯეტი 2025': item.budget2025,
+      'ბიუჯეტი 2026': item.budget2026,
+      'სხვაობა (₾)': item.difference,
+      'სხვაობა (%)': isFinite(item.percentage) ? `${item.percentage.toFixed(2)}%` : 'N/A',
+      'კომენტარი': comments[item.id] || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Budget Analysis");
+    XLSX.writeFile(workbook, "Budget_Analysis_2025_vs_2026.xlsx");
   };
 
   const processedData = useMemo(() => {
@@ -171,6 +190,12 @@ export const BudgetAnalysis: React.FC<BudgetAnalysisProps> = ({ user }) => {
             <p className="text-sm text-gray-500 font-medium">წლიური ბიუჯეტების შედარებითი ანალიზი</p>
           </div>
         </div>
+        <button 
+          onClick={exportToExcel}
+          className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+        >
+          <Download size={16} /> XLSX ექსპორტი
+        </button>
       </div>
 
       <div className="border border-gray-200 rounded-lg shadow-sm overflow-auto" style={{ maxHeight: '75vh' }}>
