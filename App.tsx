@@ -171,13 +171,13 @@ function App() {
 
         {/* PROMPT 6.7-001 & 6.8-003: Isolated and Role-Restricted Revenue Analysis Modules */}
         {activeTab === 'revenue-projects' && (
-          canViewProjects ? <RevenueAnalysis category="პროექტები" /> : <AccessDenied />
+          canViewProjects ? <RevenueAnalysis category="პროექტები" user={currentUser} /> : <AccessDenied />
         )}
         {activeTab === 'revenue-service' && (
-          canViewServiceAndParts ? <RevenueAnalysis category="სერვისი" /> : <AccessDenied />
+          canViewServiceAndParts ? <RevenueAnalysis category="სერვისი" user={currentUser} /> : <AccessDenied />
         )}
         {activeTab === 'revenue-parts' && (
-          canViewServiceAndParts ? <RevenueAnalysis category="ნაწილები" /> : <AccessDenied />
+          canViewServiceAndParts ? <RevenueAnalysis category="ნაწილები" user={currentUser} /> : <AccessDenied />
         )}
 
         {activeTab === 'accounting' && isAccountant && (

@@ -180,6 +180,62 @@ export const resetDatabase = async () => {
     { id: 'rev_other', name: 'სხვა', description: 'სხვა შემოსავლები', plannedAmount: 5000, actualAmount: 0 },
   ];
 
+  // Add some archived requests for previous weeks
+  const twoWeeksAgo = new Date();
+  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  const twoWeeksAgoStr = twoWeeksAgo.toISOString().split('T')[0];
+
+  const threeWeeksAgo = new Date();
+  threeWeeksAgo.setDate(threeWeeksAgo.getDate() - 21);
+  const threeWeeksAgoStr = threeWeeksAgo.toISOString().split('T')[0];
+
+  REQUESTS = [
+    {
+      id: 'archived_1',
+      userId: 'u_tech_dir',
+      requesterName: 'Ivane Zirakashvili',
+      department: 'Technical',
+      managerId: 'u_ceo',
+      date: twoWeeksAgoStr,
+      category: 'Equipment',
+      itemName: 'Spare Parts Batch A',
+      quantity: 1,
+      unitPrice: 4500,
+      currency: Currency.GEL,
+      totalAmount: 4500,
+      description: 'Archived request from 2 weeks ago',
+      revenuePotential: '',
+      priority: Priority.MEDIUM,
+      alternativesChecked: true,
+      selectedOptionReason: 'Standard supplier',
+      status: RequestStatus.PAID,
+      createdAt: twoWeeksAgoStr + 'T10:00:00.000Z',
+      boardDate: twoWeeksAgoStr + 'T12:00:00.000Z',
+    },
+    {
+      id: 'archived_2',
+      userId: 'u_admin_mgr',
+      requesterName: 'Lea Labadze',
+      department: 'Administration',
+      managerId: 'u_ceo',
+      date: threeWeeksAgoStr,
+      category: 'Office',
+      itemName: 'Stationery',
+      quantity: 1,
+      unitPrice: 1200,
+      currency: Currency.GEL,
+      totalAmount: 1200,
+      description: 'Archived request from 3 weeks ago',
+      revenuePotential: '',
+      priority: Priority.LOW,
+      alternativesChecked: true,
+      selectedOptionReason: 'Monthly refill',
+      status: RequestStatus.PAID,
+      createdAt: threeWeeksAgoStr + 'T09:00:00.000Z',
+      boardDate: threeWeeksAgoStr + 'T12:00:00.000Z',
+    }
+  ];
+
   const keysToClear = [
     'finboard_requests', 'finboard_board_sessions', 'finboard_directives',
     'finboard_cw_inflow', 'finboard_archived_inflow', 'finboard_projects',
@@ -518,6 +574,7 @@ try {
 const syncProjects = () => {
     localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS));
     safeEmit('update_state', { key: 'projects', value: MOCK_PROJECTS });
+    window.dispatchEvent(new Event('finboard_sync'));
 };
 
 export const getProjects = async (): Promise<ProjectRevenue[]> => [...MOCK_PROJECTS];
@@ -529,6 +586,10 @@ export const addProject = async (projectData: Omit<ProjectRevenue, 'id' | 'statu
 };
 export const updateProject = async (projectId: string, updates: Partial<ProjectRevenue>): Promise<void> => {
   MOCK_PROJECTS = MOCK_PROJECTS.map(p => p.id === projectId ? { ...p, ...updates } : p);
+  syncProjects();
+};
+export const deleteProject = async (projectId: string): Promise<void> => {
+  MOCK_PROJECTS = MOCK_PROJECTS.filter(p => p.id !== projectId);
   syncProjects();
 };
 export const terminateProject = async (projectId: string, terminationDate: string, terminationReason: string): Promise<void> => {
@@ -544,6 +605,7 @@ try {
 const syncServices = () => {
     localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES));
     safeEmit('update_state', { key: 'services', value: MOCK_SERVICES });
+    window.dispatchEvent(new Event('finboard_sync'));
 };
 
 export const getServices = async (): Promise<ServiceRevenue[]> => [...MOCK_SERVICES];
@@ -555,6 +617,10 @@ export const addService = async (serviceData: Omit<ServiceRevenue, 'id' | 'statu
 };
 export const updateService = async (serviceId: string, updates: Partial<ServiceRevenue>): Promise<void> => {
   MOCK_SERVICES = MOCK_SERVICES.map(s => s.id === serviceId ? { ...s, ...updates } : s);
+  syncServices();
+};
+export const deleteService = async (serviceId: string): Promise<void> => {
+  MOCK_SERVICES = MOCK_SERVICES.filter(s => s.id !== serviceId);
   syncServices();
 };
 export const terminateService = async (serviceId: string, terminationDate: string, terminationReason: string): Promise<void> => {
@@ -573,6 +639,7 @@ try {
 const syncParts = () => {
     localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS));
     safeEmit('update_state', { key: 'parts', value: MOCK_PARTS });
+    window.dispatchEvent(new Event('finboard_sync'));
 };
 
 export const getParts = async (): Promise<PartRevenue[]> => [...MOCK_PARTS];
@@ -584,6 +651,10 @@ export const addPart = async (partData: Omit<PartRevenue, 'id' | 'status'>): Pro
 };
 export const updatePart = async (partId: string, updates: Partial<PartRevenue>): Promise<void> => {
   MOCK_PARTS = MOCK_PARTS.map(p => p.id === partId ? { ...p, ...updates } : p);
+  syncParts();
+};
+export const deletePart = async (partId: string): Promise<void> => {
+  MOCK_PARTS = MOCK_PARTS.filter(p => p.id !== partId);
   syncParts();
 };
 export const terminatePart = async (partId: string, terminationDate: string, terminationReason: string): Promise<void> => {
@@ -871,26 +942,25 @@ const buildSession = (dateStr: string, reqs: ExpenseRequest[], isActive: boolean
 export const getFinancialCouncilSessions = async (): Promise<FinancialSession[]> => {
   const nonDraftRequests = REQUESTS.filter(req => req.status !== RequestStatus.DRAFT);
 
-  // KEY FIX: If a board session is OPEN, force ALL requests into that single session
-  // regardless of their individual boardDate values
-  const activeBoard = BOARD_SESSIONS.find(s => s.isActive);
-  if (activeBoard) {
-    const dateStr = activeBoard.weekDate.split('T')[0];
-    if (nonDraftRequests.length === 0) return [];
-    return [buildSession(dateStr, nonDraftRequests, true)];
-  }
-
-  // No active board — group archived requests by date (date-only key)
+  // Group requests by date (date-only key)
   const groups: Record<string, ExpenseRequest[]> = {};
+  const activeBoard = BOARD_SESSIONS.find(s => s.isActive);
+  const activeDateStr = activeBoard ? activeBoard.weekDate.split('T')[0] : null;
+
   nonDraftRequests.forEach(req => {
     const key = req.boardDate ? req.boardDate.split('T')[0] : new Date().toISOString().split('T')[0];
     if (!groups[key]) groups[key] = [];
     groups[key].push(req);
   });
 
+  // If there's an active board but no requests for it yet, ensure it's still represented
+  if (activeDateStr && !groups[activeDateStr]) {
+    groups[activeDateStr] = [];
+  }
+
   return Object.keys(groups)
     .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-    .map(dateStr => buildSession(dateStr, groups[dateStr], false));
+    .map(dateStr => buildSession(dateStr, groups[dateStr], dateStr === activeDateStr));
 };
 
 export const getMatrixDataForDate = async (dateStr: string): Promise<FundBalance[]> => {
@@ -934,7 +1004,7 @@ const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole):
 
   // Fallback: calculate next Wednesday
   const date = new Date(submissionDate);
-  const targetDay = 3;
+  const targetDay = 3; // Wednesday
   const targetHour = 17;
   const currentDay = date.getDay();
   const diff = targetDay - currentDay;
@@ -942,10 +1012,15 @@ const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole):
   thisWeekWednesday.setDate(date.getDate() + diff);
   thisWeekWednesday.setHours(targetHour, 0, 0, 0);
 
+  const todayStr = thisWeekWednesday.toISOString().split('T')[0];
+  // Check if a session for this Wednesday already existed and is now CLOSED
+  const isClosedToday = BOARD_SESSIONS.some(s => s.weekDate.startsWith(todayStr) && !s.isActive);
+
   if (EXEMPT_ROLES.includes(userRole)) {
     const thisWeekWednesdayEnd = new Date(thisWeekWednesday);
     thisWeekWednesdayEnd.setHours(23, 59, 59, 999);
-    if (date > thisWeekWednesdayEnd) {
+    // If it's after Wednesday OR the board for today is explicitly closed
+    if (date > thisWeekWednesdayEnd || isClosedToday) {
       const next = new Date(thisWeekWednesday);
       next.setDate(thisWeekWednesday.getDate() + 7);
       return next;
@@ -953,7 +1028,8 @@ const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole):
     return thisWeekWednesday;
   }
 
-  if (date > thisWeekWednesday) {
+  // For regular users, if it's after Wednesday 17:00 OR the board is closed
+  if (date > thisWeekWednesday || isClosedToday) {
     const next = new Date(thisWeekWednesday);
     next.setDate(thisWeekWednesday.getDate() + 7);
     return next;
@@ -962,14 +1038,30 @@ const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole):
   return thisWeekWednesday;
 };
 
-// ✅ FIX HELPER: Normalize all existing requests to the active session date
-const normalizeRequestsBoardDate = (dateStr: string): void => {
-  const targetDate = dateStr + 'T12:00:00.000Z';
+// ✅ FIX HELPER: Rollover pending requests to the next board date
+const rolloverPendingRequests = (nextDateStr: string): void => {
+  const targetDate = nextDateStr + 'T12:00:00.000Z';
+  const finalStatuses = [
+    RequestStatus.PAID,
+    RequestStatus.REJECTED,
+    RequestStatus.DISPATCHED_TO_ACCOUNTING,
+    RequestStatus.APPROVED_FOR_PAYMENT,
+    // FD_APPROVED, FD_FINAL_CONFIRM, READY_FOR_PAYMENT are NOT final statuses for rollover
+    // because if the board closes and they weren't dispatched, they should move to the next board.
+  ];
+
   let changed = false;
   REQUESTS = REQUESTS.map(req => {
-    if (req.status !== RequestStatus.DRAFT && req.boardDate !== targetDate) {
-      changed = true;
-      return { ...req, boardDate: targetDate };
+    // If it's not a draft and not in a final status, move it to the next board
+    // This includes COUNCIL_REVIEW, WAITING_DEPT_APPROVAL, RETURNED_TO_SENDER, etc.
+    // Also include FD_APPROVED if it wasn't dispatched.
+    if (req.status !== RequestStatus.DRAFT && !finalStatuses.includes(req.status)) {
+      // Only move if it's assigned to a board date that is NOT in the future relative to targetDate
+      // (Simplified: if it's not already on the targetDate or later)
+      if (new Date(req.boardDate).getTime() < new Date(targetDate).getTime()) {
+        changed = true;
+        return { ...req, boardDate: targetDate };
+      }
     }
     return req;
   });
@@ -1135,6 +1227,10 @@ export const resubmitRequest = async (requestId: string, updates: Partial<Expens
 
 // ✅ FIX 4: Include WAITING_DEPT_APPROVAL so Tech Director's requests show up
 export const getDirectorBoardRequests = async (): Promise<ExpenseRequest[]> => {
+  const active = BOARD_SESSIONS.find(s => s.isActive);
+  if (!active) return [];
+  const targetDate = active.weekDate.split('T')[0];
+
   const relevantStatuses = [
     RequestStatus.WAITING_DEPT_APPROVAL,  // ← Tech Director's requests
     RequestStatus.COUNCIL_REVIEW,
@@ -1142,7 +1238,10 @@ export const getDirectorBoardRequests = async (): Promise<ExpenseRequest[]> => {
   ];
   
   return REQUESTS
-    .filter(r => relevantStatuses.includes(r.status))
+    .filter(r => 
+        relevantStatuses.includes(r.status) && 
+        r.boardDate && r.boardDate.startsWith(targetDate)
+    )
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 };
 
@@ -1155,30 +1254,30 @@ export const getBoardSession = async (): Promise<BoardSession | null> => {
 // ✅ FIX 3: openBoardSession — remove Wednesday restriction, normalize existing requests
 export const openBoardSession = async (user: User): Promise<BoardSession> => {
   const now = new Date();
-
-  // Use today's date as the canonical session date
-  const todayStr = now.toISOString().split('T')[0];
-  const weekDateStr = todayStr + 'T12:00:00.000Z';
+  const targetDate = determineBoardDateForRequest(now, user.role);
+  const targetDateStr = targetDate.toISOString().split('T')[0];
+  const weekDateStr = targetDateStr + 'T12:00:00.000Z';
 
   // 1. Check if there's already an active session
   const existingActive = BOARD_SESSIONS.find(s => s.isActive);
   if (existingActive) {
-    // Normalize any stray requests to this session
-    normalizeRequestsBoardDate(existingActive.weekDate.split('T')[0]);
+    // Pull in any pending requests to this session
+    rolloverPendingRequests(existingActive.weekDate.split('T')[0]);
     return existingActive;
   }
 
-  // 2. Check if a session for today already exists (even if closed) — reopen it
-  const existingSession = BOARD_SESSIONS.find(s => s.weekDate.split('T')[0] === todayStr);
+  // 2. Check if a session for the target date already exists (even if closed) — reopen it
+  // This allows reopening a board if it was closed by mistake, but only for the target date
+  const existingSession = BOARD_SESSIONS.find(s => s.weekDate.split('T')[0] === targetDateStr);
   if (existingSession) {
     existingSession.isActive = true;
     syncBoardSessions();
     localStorage.setItem('finboard_council_step', '1');
-    normalizeRequestsBoardDate(todayStr);
+    rolloverPendingRequests(targetDateStr);
     return existingSession;
   }
 
-  // 3. Create new session
+  // 3. Create new session for the target date (which could be today or next week)
   const session: BoardSession = {
     id: `board_${Date.now()}`,
     weekDate: weekDateStr,
@@ -1191,22 +1290,29 @@ export const openBoardSession = async (user: User): Promise<BoardSession> => {
   BOARD_SESSIONS.push(session);
   syncBoardSessions();
   localStorage.setItem('finboard_council_step', '1');
-  // ✅ Normalize ALL existing non-draft requests to this session's date
-  normalizeRequestsBoardDate(todayStr);
+  // ✅ Pull in ALL pending requests to this session's date
+  rolloverPendingRequests(targetDateStr);
   return session;
 };
 
-export const closeBoardSession = async (user: User): Promise<BoardSession> => {
+export const closeBoardSession = async (user: User): Promise<BoardSession | null> => {
     const active = BOARD_SESSIONS.find(s => s.isActive);
     if (active) {
         active.isActive = false;
         active.endTime = new Date().toISOString();
+        
+        // Rollover logic: Move pending requests to the NEXT board date
+        const nextDate = new Date(active.weekDate);
+        nextDate.setDate(nextDate.getDate() + 7);
+        rolloverPendingRequests(nextDate.toISOString().split('T')[0]);
     }
+    
     syncBoardSessions();
     localStorage.removeItem('finboard_council_step');
 
-    // Create new session
-    return await openBoardSession(user);
+    // We don't automatically open a new session anymore, 
+    // the user will do it from the archive view when they are ready.
+    return null;
 };
 
 export const saveBoardStep = (step: number): void => {
@@ -1224,12 +1330,25 @@ export const getArchivedBoardSessions = async (): Promise<BoardSession[]> => {
 };
 
 export const getFdFinalRequests = async (): Promise<ExpenseRequest[]> => {
-    return REQUESTS.filter(r => r.status === RequestStatus.FD_APPROVED);
+    const active = BOARD_SESSIONS.find(s => s.isActive);
+    if (!active) return [];
+    const targetDate = active.weekDate.split('T')[0];
+    return REQUESTS.filter(r => 
+        r.status === RequestStatus.FD_APPROVED && 
+        r.boardDate && r.boardDate.startsWith(targetDate)
+    );
 };
 
 export const getDispatchedRequests = async (): Promise<ExpenseRequest[]> => {
+    const active = BOARD_SESSIONS.find(s => s.isActive);
+    const targetDate = active ? active.weekDate.split('T')[0] : null;
+
     return REQUESTS
-      .filter(r => r.status === RequestStatus.DISPATCHED_TO_ACCOUNTING || r.status === RequestStatus.PAID)
+      .filter(r => {
+          const isStatusMatch = r.status === RequestStatus.DISPATCHED_TO_ACCOUNTING || r.status === RequestStatus.PAID;
+          if (!targetDate) return isStatusMatch;
+          return isStatusMatch && r.boardDate && r.boardDate.startsWith(targetDate);
+      })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 

@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { ProjectRevenue, ProjectTranche, Currency } from '../types';
-import { getProjects, addProject, updateProject, terminateProject, getCurrencyRates, useSync } from '../services/mockService';
+import { getProjects, addProject, updateProject, terminateProject, deleteProject, getCurrencyRates, useSync } from '../services/mockService';
+import { User, UserRole } from '../types';
 import { formatNumber } from '../utils/formatters';
 import { FolderKanban, Plus, Download, Upload, Edit2, ChevronDown, ChevronRight, Save, X, Trash2, AlertTriangle, Archive } from 'lucide-react';
 import { exportGenericToExcel } from '../utils/excelExport';
@@ -187,7 +188,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, in
 
 
 // --- Main Component ---
-export const RevenueProjects: React.FC = () => {
+export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
     const [projects, setProjects] = useState<ProjectRevenue[]>([]);
     const [rates, setRates] = useState({ USD: 1, EUR: 1 });
     const [loading, setLoading] = useState(true);
@@ -234,6 +235,13 @@ export const RevenueProjects: React.FC = () => {
       setIsTerminationModalOpen(false);
       setTerminatingProject(null);
       fetchData();
+    };
+
+    const handleDeleteProject = async (id: string) => {
+        if (window.confirm('ნამდვილად გსურთ პროექტის სამუდამოდ წაშლა?')) {
+            await deleteProject(id);
+            fetchData();
+        }
     };
     
     const handleOpenModal = (project: ProjectRevenue | null = null) => {
@@ -571,7 +579,15 @@ export const RevenueProjects: React.FC = () => {
                                 {!collapsedBlocks['E'] && <><td className="px-2 py-1.5 text-right font-mono border-l bg-gray-100">{formatNumber(p.priceAnalysisUnitPrice)}</td><td className="px-2 py-1.5 text-right font-mono bg-gray-100">{formatNumber(p.priceAnalysisFloorPrice)}</td><td className="px-2 py-1.5 text-right font-mono bg-gray-100">{formatNumber(p.priceAnalysisWeeklyPrice)}</td><td className="px-2 py-1.5 text-right font-mono bg-gray-100">{formatNumber(p.priceAnalysisMonthlyPrice)}</td></>}
                                 {!collapsedBlocks['C'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totalGEL)}</td><td className="px-2 py-1.5 text-right font-mono text-green-600">{formatNumber(receivedGEL)}</td><td className="px-2 py-1.5 text-right font-mono font-bold text-red-600">{formatNumber(remainingGEL)}</td><td className="px-2 py-1.5"><div className="w-full bg-gray-200 rounded-full h-2.5"><div className="bg-green-600 h-2.5 rounded-full" style={{width: `${100-remainingPct}%`}}></div></div></td></>}
                                 {!collapsedBlocks['D'] && monthlyDistribution[p.id].map((amount, i) => <td key={i} className="px-2 py-1.5 text-right font-mono border-l">{amount > 0 ? formatNumber(amount) : '-'}</td>)}
-                                <td className="px-2 py-1.5 text-center"><button onClick={() => handleOpenModal(p)} className="p-1 hover:bg-gray-200 rounded"><Edit2 size={14}/></button><button onClick={() => { setTerminatingProject(p); setIsTerminationModalOpen(true); }} className="p-1 text-red-500 hover:bg-red-100 rounded ml-1"><Trash2 size={14}/></button></td>
+                                <td className="px-2 py-1.5 text-center">
+    <button onClick={() => handleOpenModal(p)} className="p-1 hover:bg-gray-200 rounded"><Edit2 size={14}/></button>
+    <button onClick={() => { setTerminatingProject(p); setIsTerminationModalOpen(true); }} className="p-1 text-red-500 hover:bg-red-100 rounded ml-1"><Trash2 size={14}/></button>
+    {user.role === UserRole.FIN_DIRECTOR && (
+        <button onClick={() => handleDeleteProject(p.id)} className="p-1 text-red-700 hover:bg-red-200 rounded ml-1" title="სამუდამოდ წაშლა">
+            <X size={14}/>
+        </button>
+    )}
+</td>
                             </tr>
                             );
                         })}

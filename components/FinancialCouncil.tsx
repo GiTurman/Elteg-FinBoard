@@ -138,7 +138,9 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     saveBoardStep(step);
   };
 
-  // Load active board session on mount
+  const syncTrigger = useSync();
+
+  // Load active board session on mount & on sync
   useEffect(() => {
     const loadSession = async () => {
       setBoardLoading(true);
@@ -152,7 +154,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       setBoardLoading(false);
     };
     loadSession();
-  }, []);
+  }, [syncTrigger]);
 
   const [sessions, setSessions] = useState<FinancialSession[]>([]);
   const [selectedSessionDate, setSelectedSessionDate] = useState<string | null>(null);
@@ -189,7 +191,6 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
 
   const isFinDirector = user.role === UserRole.FIN_DIRECTOR;
   const isTopLevel = user.role === UserRole.FOUNDER || user.role === UserRole.FIN_DIRECTOR || user.role === UserRole.CEO;
-  const syncTrigger = useSync();
   
   const calculatedRevenue = useMemo(() => {
     return revenueCategories.map(cat => {
@@ -450,9 +451,9 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
 
   const handleCloseBoard = async () => {
     const weekDate = activeBoardSession?.weekDate || 'N/A';
-    const newSession = await closeBoardSession(user);
-    setActiveBoardSession(newSession);
-    setCurrentStep(1);
+    await closeBoardSession(user);
+    setActiveBoardSession(null);
+    setCurrentStep(0);
     setSelectedSessionDate(null);
     // Reset report state
     setIsReportGenerated(false);
@@ -747,14 +748,12 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
            </div>
            
            <div className="flex items-center gap-3">
-               {activeBoardSession && isFinDirector && currentStep !== 0 && (
-                    <button onClick={() => { setCurrentStep(0); setSelectedSessionDate(null); }} className="text-xs font-bold text-gray-500 hover:text-black uppercase border-b border-gray-300 pb-0.5">
-                        არქივში დაბრუნება
-                    </button>
-               )}
-               {!activeBoardSession && currentStep !== 0 && (
-                    <button onClick={() => { setCurrentStep(0); setSelectedSessionDate(null); }} className="text-xs font-bold text-gray-500 hover:text-black uppercase border-b border-gray-300 pb-0.5">
-                        არქივში დაბრუნება
+               {currentStep !== 0 && isTopLevel && (
+                    <button 
+                        onClick={() => { setCurrentStep(0); setSelectedSessionDate(null); }} 
+                        className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-black rounded-lg transition-all text-[10px] font-bold uppercase tracking-wider border border-gray-200 shadow-sm"
+                    >
+                        <Archive size={12} /> არქივში დაბრუნება
                     </button>
                )}
            </div>
@@ -791,7 +790,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
           <>
              {currentStep === 0 && (
                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
-                     {!isTopLevel ? (
+                     {(!isTopLevel && user.role !== UserRole.FIN_DIRECTOR) ? (
                          <div className="flex flex-col items-center justify-center py-24 text-center">
                              <div className="w-20 h-20 bg-red-50 text-red-400 rounded-full flex items-center justify-center mb-6">
                                  <Lock size={40} />
@@ -849,27 +848,29 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                              <div className="w-px h-8 bg-gray-200 mx-2 hidden lg:block"></div>
 
                              {/* Board Session Control */}
-                             {activeBoardSession ? (
-                                 <button 
-                                    onClick={() => setCurrentStep(1)}
-                                    className="px-6 py-2 bg-green-600 text-white font-bold uppercase rounded hover:bg-green-700 transition-colors flex items-center gap-2 shadow-lg text-xs"
-                                 >
-                                     <PlayCircle size={14} /> საბჭოში გადასვლა
-                                 </button>
-                             ) : (
-                                 isFinDirector ? (
+                             <div className="flex gap-2">
+                                 {activeBoardSession && (
+                                     <button 
+                                        onClick={() => setCurrentStep(1)}
+                                        className="px-6 py-2 bg-green-600 text-white font-bold uppercase rounded hover:bg-green-700 transition-colors flex items-center gap-2 shadow-lg text-xs"
+                                     >
+                                         <PlayCircle size={14} /> საბჭოში გადასვლა
+                                     </button>
+                                 )}
+                                 {(isFinDirector || user.role === UserRole.FIN_DIRECTOR) && (
                                      <button 
                                         onClick={handleOpenBoard}
                                         className="px-6 py-2 bg-black text-white font-bold uppercase rounded hover:bg-gray-800 transition-colors flex items-center gap-2 shadow-lg text-xs"
                                      >
                                          <Gavel size={14} /> საბჭოს გახსნა
                                      </button>
-                                 ) : (
+                                 )}
+                                 {!activeBoardSession && !(isFinDirector || user.role === UserRole.FIN_DIRECTOR) && (
                                      <div className="px-4 py-2 bg-gray-100 text-gray-400 font-bold uppercase rounded text-xs flex items-center gap-2 border border-gray-200">
                                          <Lock size={14} /> საბჭო დახურულია
                                      </div>
-                                 )
-                             )}
+                                 )}
+                             </div>
                          </div>
                      </div>
 

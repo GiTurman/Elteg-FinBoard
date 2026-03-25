@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Download, Upload, BarChart2, AlertTriangle, Server, FolderKanban, Plus, Edit2, ChevronDown, ChevronRight, X, Trash2, Package, Archive } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { RevenueProjects } from './RevenueProjects';
-import { ServiceRevenue, PartRevenue, ProjectTranche, Currency } from '../types';
-import { getServices, addService, updateService, terminateService, getParts, addPart, updatePart, terminatePart, getCurrencyRates, useSync } from '../services/mockService';
+import { ServiceRevenue, PartRevenue, ProjectTranche, Currency, User, UserRole } from '../types';
+import { getServices, addService, updateService, terminateService, deleteService, getParts, addPart, updatePart, terminatePart, deletePart, getCurrencyRates, useSync } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 import { exportGenericToExcel } from '../utils/excelExport';
 
@@ -164,7 +164,7 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ isOpen, onClose, onSave, in
   );
 };
 
-export const RevenueService: React.FC = () => {
+export const RevenueService: React.FC<{ user: User }> = ({ user }) => {
     const [services, setServices] = useState<ServiceRevenue[]>([]);
     const [rates, setRates] = useState({ USD: 1, EUR: 1 });
     const [loading, setLoading] = useState(true);
@@ -184,6 +184,13 @@ export const RevenueService: React.FC = () => {
     const handleSaveService = async (data: Omit<ServiceRevenue, 'id' | 'status'> | ServiceRevenue) => { if ('id' in data) { await updateService(data.id, data); } else { await addService(data); } fetchData(); setIsModalOpen(false); };
     const handleOpenModal = (service: ServiceRevenue | null = null) => { setEditingService(service); setIsModalOpen(true); };
     const handleConfirmTermination = async (date: string, reason: string) => { if (!terminatingService) return; await terminateService(terminatingService.id, date, reason); setIsTerminationModalOpen(false); setTerminatingService(null); fetchData(); };
+    
+    const handleDeleteService = async (id: string) => {
+        if (window.confirm('ნამდვილად გსურთ ჩანაწერის სამუდამოდ წაშლა?')) {
+            await deleteService(id);
+            fetchData();
+        }
+    };
     
     const downloadTemplate = () => {
         const headers = [
@@ -327,7 +334,15 @@ export const RevenueService: React.FC = () => {
                 <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm" style={{maxHeight: '75vh'}}>
                     <table className="w-full text-xs text-left">
                         <thead className="sticky top-0 z-20"><tr className="bg-amber-100 text-amber-800 font-bold uppercase">{['A. დეტალიზაცია','B. გრაფიკი','E. ფასის ანალიზი','C. ანალიზი',`D. შემოსავალი (${CURRENT_YEAR})`].map((h, i)=>(<th key={h} className={`px-2 py-1.5 ${i > 0 && 'border-l border-amber-200'}`} colSpan={i === 0 ? 11 : i === 3 ? 4 : i === 4 ? 12 : 4}><button onClick={()=>toggleBlock(h[0])} className="flex items-center gap-1 w-full text-xs">{h} {collapsedBlocks[h[0]]?<ChevronRight size={14}/>:<ChevronDown size={14}/>}</button></th>))}<th className="bg-amber-100"></th></tr><tr className="bg-sky-100 text-sky-800 font-bold uppercase"><th className="px-2 py-1 sticky left-0 bg-sky-100 z-30">დამკვეთი</th>{!collapsedBlocks['A']&&<><th className="px-2 py-1">გაფ. თარიღი</th><th className="px-2 py-1">კონტრაქტი N</th><th className="px-2 py-1">პროდ. ტიპი</th><th className="px-2 py-1">ბრენდი</th><th className="px-2 py-1">პროდუქცია</th><th className="px-2 py-1">ერთ.</th><th className="px-2 py-1">რაოდ.</th><th className="px-2 py-1 text-right">ღირებულება</th><th className="px-2 py-1">ვალუტა</th><th className="px-2 py-1">სართ/გაჩერება</th></>}{!collapsedBlocks['B']&&<><th className="px-2 py-1 text-center border-l border-sky-200">I %</th><th className="px-2 py-1 text-center">II %</th><th className="px-2 py-1 text-center">III %</th><th className="px-2 py-1 text-center">IV %</th></>}{!collapsedBlocks['E']&&<><th className="px-2 py-1 text-right border-l border-sky-200">ერთ. ღირ.</th><th className="px-2 py-1 text-right">სართ. ღირ.</th><th className="px-2 py-1 text-right">კვირ. ღირ.</th><th className="px-2 py-1 text-right">თვის. ღირ.</th></>}{!collapsedBlocks['C']&&<><th className="px-2 py-1 text-right border-l border-sky-200">სულ მისაღები</th><th className="px-2 py-1 text-right">სულ მიღებული</th><th className="px-2 py-1 text-right">დარჩენილი (GEL)</th><th className="px-2 py-1 w-28">დარჩენილი %</th></>}{!collapsedBlocks['D']&&MONTH_NAMES_GE.map(m=><th key={m} className="px-2 py-1 text-right border-l border-sky-200 w-24">{m}</th>)}<th className="px-2 py-1 w-20"></th></tr></thead>
-                        <tbody className="divide-y divide-gray-100">{processedServices.map(s => { const rate = getRate(s.currency); const totalGEL = s.value * rate; const receivedGEL = s.totalReceived * rate; const remainingGEL = totalGEL - receivedGEL; const remainingPct = totalGEL > 0 ? (remainingGEL / totalGEL) * 100 : 0; return (<tr key={s.id} className="hover:bg-blue-50/50"><td className="px-2 py-1.5 font-bold sticky left-0 bg-white hover:bg-blue-50/50 z-10">{s.clientName}</td>{!collapsedBlocks['A'] && <><td className="px-2 py-1.5">{new Date(s.contractDate).toLocaleDateString()}</td><td className="px-2 py-1.5">{s.contractNumber}</td><td>{s.productType}</td><td>{s.brand}</td><td>{s.product}</td><td>{s.unit}</td><td className="px-2 py-1.5 text-center font-mono">{s.quantity}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.value)}</td><td className="px-2 py-1.5">{s.currency}</td><td className="px-2 py-1.5 text-center font-mono">{s.floorsOrStops}</td></>}{!collapsedBlocks['B'] && <>{[0, 1, 2, 3].map(i => <td key={i} className={`px-2 py-1.5 text-center font-mono ${i===0?'border-l':''}`}>{s.tranches[i] ? `${s.tranches[i].percentage}%` : '-'}</td>)}</>}{!collapsedBlocks['E'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(s.priceAnalysisUnitPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.priceAnalysisFloorPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.priceAnalysisWeeklyPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.priceAnalysisMonthlyPrice)}</td></>}{!collapsedBlocks['C'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totalGEL)}</td><td className="px-2 py-1.5 text-right font-mono text-green-600">{formatNumber(receivedGEL)}</td><td className="px-2 py-1.5 text-right font-mono font-bold text-red-600">{formatNumber(remainingGEL)}</td><td className="px-2 py-1.5"><div className="w-full bg-gray-200 rounded-full h-2.5"><div className="bg-green-600 h-2.5 rounded-full" style={{width: `${100-remainingPct}%`}}></div></div></td></>}{!collapsedBlocks['D'] && monthlyDistribution[s.id].map((amount, i) => <td key={i} className="px-2 py-1.5 text-right font-mono border-l">{amount > 0 ? formatNumber(amount) : '-'}</td>)}<td className="px-2 py-1.5 text-center"><button onClick={() => handleOpenModal(s)} className="p-1 hover:bg-gray-200 rounded"><Edit2 size={14}/></button><button onClick={() => { setTerminatingService(s); setIsTerminationModalOpen(true); }} className="p-1 text-red-500 hover:bg-red-100 rounded ml-1"><Trash2 size={14}/></button></td></tr>);})}</tbody>
+                        <tbody className="divide-y divide-gray-100">{processedServices.map(s => { const rate = getRate(s.currency); const totalGEL = s.value * rate; const receivedGEL = s.totalReceived * rate; const remainingGEL = totalGEL - receivedGEL; const remainingPct = totalGEL > 0 ? (remainingGEL / totalGEL) * 100 : 0; return (<tr key={s.id} className="hover:bg-blue-50/50"><td className="px-2 py-1.5 font-bold sticky left-0 bg-white hover:bg-blue-50/50 z-10">{s.clientName}</td>{!collapsedBlocks['A'] && <><td className="px-2 py-1.5">{new Date(s.contractDate).toLocaleDateString()}</td><td className="px-2 py-1.5">{s.contractNumber}</td><td>{s.productType}</td><td>{s.brand}</td><td>{s.product}</td><td>{s.unit}</td><td className="px-2 py-1.5 text-center font-mono">{s.quantity}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.value)}</td><td className="px-2 py-1.5">{s.currency}</td><td className="px-2 py-1.5 text-center font-mono">{s.floorsOrStops}</td></>}{!collapsedBlocks['B'] && <>{[0, 1, 2, 3].map(i => <td key={i} className={`px-2 py-1.5 text-center font-mono ${i===0?'border-l':''}`}>{s.tranches[i] ? `${s.tranches[i].percentage}%` : '-'}</td>)}</>}{!collapsedBlocks['E'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(s.priceAnalysisUnitPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.priceAnalysisFloorPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.priceAnalysisWeeklyPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.priceAnalysisMonthlyPrice)}</td></>}{!collapsedBlocks['C'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totalGEL)}</td><td className="px-2 py-1.5 text-right font-mono text-green-600">{formatNumber(receivedGEL)}</td><td className="px-2 py-1.5 text-right font-mono font-bold text-red-600">{formatNumber(remainingGEL)}</td><td className="px-2 py-1.5"><div className="w-full bg-gray-200 rounded-full h-2.5"><div className="bg-green-600 h-2.5 rounded-full" style={{width: `${100-remainingPct}%`}}></div></div></td></>}{!collapsedBlocks['D'] && monthlyDistribution[s.id].map((amount, i) => <td key={i} className="px-2 py-1.5 text-right font-mono border-l">{amount > 0 ? formatNumber(amount) : '-'}</td>)}<td className="px-2 py-1.5 text-center">
+    <button onClick={() => handleOpenModal(s)} className="p-1 hover:bg-gray-200 rounded"><Edit2 size={14}/></button>
+    <button onClick={() => { setTerminatingService(s); setIsTerminationModalOpen(true); }} className="p-1 text-red-500 hover:bg-red-100 rounded ml-1"><Trash2 size={14}/></button>
+    {user.role === UserRole.FIN_DIRECTOR && (
+        <button onClick={() => handleDeleteService(s.id)} className="p-1 text-red-700 hover:bg-red-200 rounded ml-1" title="სამუდამოდ წაშლა">
+            <X size={14}/>
+        </button>
+    )}
+</td></tr>);})}</tbody>
                         <tfoot className="sticky bottom-0 z-20"><tr className="bg-gray-200 text-black font-bold"><td className="px-2 py-1.5 sticky left-0 bg-gray-200 z-30">ჯამი:</td>{!collapsedBlocks['A'] && <><td colSpan={6}></td><td className="px-2 py-1.5 text-center font-mono">{totals.totalQuantity}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.totalGEL)}</td><td>GEL</td><td className="px-2 py-1.5 text-center font-mono">{totals.totalFloorsOrStops}</td></>}{!collapsedBlocks['B'] && <td colSpan={4} className="border-l"></td>}{!collapsedBlocks['E'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totals.totalUnitPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.totalStopPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.totalWeeklyPrice)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.totalMonthlyPrice)}</td></>}{!collapsedBlocks['C'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totals.totalGEL)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.receivedGEL)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.remainingGEL)}</td><td></td></>}{!collapsedBlocks['D'] && totals.monthlyTotals.map((total, i) => (<td key={i} className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(total)}</td>))}<td></td></tr></tfoot>
                     </table>
                 </div>
@@ -434,7 +449,7 @@ const PartModal: React.FC<PartModalProps> = ({ isOpen, onClose, onSave, initialD
   );
 };
 
-export const RevenueParts: React.FC = () => {
+export const RevenueParts: React.FC<{ user: User }> = ({ user }) => {
     const [parts, setParts] = useState<PartRevenue[]>([]);
     const [rates, setRates] = useState({ USD: 1, EUR: 1 });
     const [loading, setLoading] = useState(true);
@@ -454,6 +469,13 @@ export const RevenueParts: React.FC = () => {
     const handleSavePart = async (data: Omit<PartRevenue, 'id' | 'status'> | PartRevenue) => { if ('id' in data) { await updatePart(data.id, data); } else { await addPart(data); } fetchData(); setIsModalOpen(false); };
     const handleOpenModal = (part: PartRevenue | null = null) => { setEditingPart(part); setIsModalOpen(true); };
     const handleConfirmTermination = async (date: string, reason: string) => { if (!terminatingPart) return; await terminatePart(terminatingPart.id, date, reason); setIsTerminationModalOpen(false); setTerminatingPart(null); fetchData(); };
+
+    const handleDeletePart = async (id: string) => {
+        if (window.confirm('ნამდვილად გსურთ ჩანაწერის სამუდამოდ წაშლა?')) {
+            await deletePart(id);
+            fetchData();
+        }
+    };
 
     const downloadTemplate = () => {
         const headers = [
@@ -592,7 +614,15 @@ export const RevenueParts: React.FC = () => {
                 <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm" style={{maxHeight: '75vh'}}>
                     <table className="w-full text-xs text-left">
                         <thead className="sticky top-0 z-20"><tr className="bg-amber-100 text-amber-800 font-bold uppercase">{['A. დეტალიზაცია','B. გრაფიკი','E. ფასის ანალიზი','C. ანალიზი',`D. შემოსავალი (${CURRENT_YEAR})`].map((h, i)=>(<th key={h} className={`px-2 py-1.5 ${i > 0 && 'border-l border-amber-200'}`} colSpan={i === 0 ? 11 : i === 3 ? 4 : i === 4 ? 12 : i === 2 ? 1 : 4}><button onClick={()=>toggleBlock(h[0])} className="flex items-center gap-1 w-full text-xs">{h} {collapsedBlocks[h[0]]?<ChevronRight size={14}/>:<ChevronDown size={14}/>}</button></th>))}<th className="bg-amber-100"></th></tr><tr className="bg-sky-100 text-sky-800 font-bold uppercase"><th className="px-2 py-1 sticky left-0 bg-sky-100 z-30">დამკვეთი</th>{!collapsedBlocks['A']&&<><th className="px-2 py-1">გაფ. თარიღი</th><th className="px-2 py-1">კონტრაქტი N</th><th className="px-2 py-1">პროდ. ტიპი</th><th className="px-2 py-1">ბრენდი</th><th className="px-2 py-1">პროდუქცია</th><th className="px-2 py-1">ერთ.</th><th className="px-2 py-1">რაოდ.</th><th className="px-2 py-1 text-right">ღირებულება</th><th className="px-2 py-1">ვალუტა</th><th className="px-2 py-1">სართ/გაჩერება</th></>}{!collapsedBlocks['B']&&<><th className="px-2 py-1 text-center border-l border-sky-200">I %</th><th className="px-2 py-1 text-center">II %</th><th className="px-2 py-1 text-center">III %</th><th className="px-2 py-1 text-center">IV %</th></>}{!collapsedBlocks['E']&&<><th className="px-2 py-1 text-right border-l border-sky-200">ერთ. ღირ.</th></>}{!collapsedBlocks['C']&&<><th className="px-2 py-1 text-right border-l border-sky-200">სულ მისაღები</th><th className="px-2 py-1 text-right">სულ მიღებული</th><th className="px-2 py-1 text-right">დარჩენილი (GEL)</th><th className="px-2 py-1 w-28">დარჩენილი %</th></>}{!collapsedBlocks['D']&&MONTH_NAMES_GE.map(m=><th key={m} className="px-2 py-1 text-right border-l border-sky-200 w-24">{m}</th>)}<th className="px-2 py-1 w-20"></th></tr></thead>
-                        <tbody className="divide-y divide-gray-100">{processedParts.map(s => { const rate = getRate(s.currency); const totalGEL = s.value * rate; const receivedGEL = s.totalReceived * rate; const remainingGEL = totalGEL - receivedGEL; const remainingPct = totalGEL > 0 ? (remainingGEL / totalGEL) * 100 : 0; return (<tr key={s.id} className="hover:bg-blue-50/50"><td className="px-2 py-1.5 font-bold sticky left-0 bg-white hover:bg-blue-50/50 z-10">{s.clientName}</td>{!collapsedBlocks['A'] && <><td className="px-2 py-1.5">{new Date(s.contractDate).toLocaleDateString()}</td><td className="px-2 py-1.5">{s.contractNumber}</td><td>{s.productType}</td><td>{s.brand}</td><td>{s.product}</td><td>{s.unit}</td><td className="px-2 py-1.5 text-center font-mono">{s.quantity}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.value)}</td><td className="px-2 py-1.5">{s.currency}</td><td className="px-2 py-1.5 text-center font-mono">{s.floorsOrStops}</td></>}{!collapsedBlocks['B'] && <>{[0, 1, 2, 3].map(i => <td key={i} className={`px-2 py-1.5 text-center font-mono ${i===0?'border-l':''}`}>{s.tranches[i] ? `${s.tranches[i].percentage}%` : '-'}</td>)}</>}{!collapsedBlocks['E'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(s.priceAnalysisUnitPrice)}</td></>}{!collapsedBlocks['C'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totalGEL)}</td><td className="px-2 py-1.5 text-right font-mono text-green-600">{formatNumber(receivedGEL)}</td><td className="px-2 py-1.5 text-right font-mono font-bold text-red-600">{formatNumber(remainingGEL)}</td><td className="px-2 py-1.5"><div className="w-full bg-gray-200 rounded-full h-2.5"><div className="bg-green-600 h-2.5 rounded-full" style={{width: `${100-remainingPct}%`}}></div></div></td></>}{!collapsedBlocks['D'] && monthlyDistribution[s.id].map((amount, i) => <td key={i} className="px-2 py-1.5 text-right font-mono border-l">{amount > 0 ? formatNumber(amount) : '-'}</td>)}<td className="px-2 py-1.5 text-center"><button onClick={() => handleOpenModal(s)} className="p-1 hover:bg-gray-200 rounded"><Edit2 size={14}/></button><button onClick={() => { setTerminatingPart(s); setIsTerminationModalOpen(true); }} className="p-1 text-red-500 hover:bg-red-100 rounded ml-1"><Trash2 size={14}/></button></td></tr>);})}</tbody>
+                        <tbody className="divide-y divide-gray-100">{processedParts.map(s => { const rate = getRate(s.currency); const totalGEL = s.value * rate; const receivedGEL = s.totalReceived * rate; const remainingGEL = totalGEL - receivedGEL; const remainingPct = totalGEL > 0 ? (remainingGEL / totalGEL) * 100 : 0; return (<tr key={s.id} className="hover:bg-blue-50/50"><td className="px-2 py-1.5 font-bold sticky left-0 bg-white hover:bg-blue-50/50 z-10">{s.clientName}</td>{!collapsedBlocks['A'] && <><td className="px-2 py-1.5">{new Date(s.contractDate).toLocaleDateString()}</td><td className="px-2 py-1.5">{s.contractNumber}</td><td>{s.productType}</td><td>{s.brand}</td><td>{s.product}</td><td>{s.unit}</td><td className="px-2 py-1.5 text-center font-mono">{s.quantity}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(s.value)}</td><td className="px-2 py-1.5">{s.currency}</td><td className="px-2 py-1.5 text-center font-mono">{s.floorsOrStops}</td></>}{!collapsedBlocks['B'] && <>{[0, 1, 2, 3].map(i => <td key={i} className={`px-2 py-1.5 text-center font-mono ${i===0?'border-l':''}`}>{s.tranches[i] ? `${s.tranches[i].percentage}%` : '-'}</td>)}</>}{!collapsedBlocks['E'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(s.priceAnalysisUnitPrice)}</td></>}{!collapsedBlocks['C'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totalGEL)}</td><td className="px-2 py-1.5 text-right font-mono text-green-600">{formatNumber(receivedGEL)}</td><td className="px-2 py-1.5 text-right font-mono font-bold text-red-600">{formatNumber(remainingGEL)}</td><td className="px-2 py-1.5"><div className="w-full bg-gray-200 rounded-full h-2.5"><div className="bg-green-600 h-2.5 rounded-full" style={{width: `${100-remainingPct}%`}}></div></div></td></>}{!collapsedBlocks['D'] && monthlyDistribution[s.id].map((amount, i) => <td key={i} className="px-2 py-1.5 text-right font-mono border-l">{amount > 0 ? formatNumber(amount) : '-'}</td>)}<td className="px-2 py-1.5 text-center">
+    <button onClick={() => handleOpenModal(s)} className="p-1 hover:bg-gray-200 rounded"><Edit2 size={14}/></button>
+    <button onClick={() => { setTerminatingPart(s); setIsTerminationModalOpen(true); }} className="p-1 text-red-500 hover:bg-red-100 rounded ml-1"><Trash2 size={14}/></button>
+    {user.role === UserRole.FIN_DIRECTOR && (
+        <button onClick={() => handleDeletePart(s.id)} className="p-1 text-red-700 hover:bg-red-200 rounded ml-1" title="სამუდამოდ წაშლა">
+            <X size={14}/>
+        </button>
+    )}
+</td></tr>);})}</tbody>
                         <tfoot className="sticky bottom-0 z-20"><tr className="bg-gray-200 text-black font-bold"><td className="px-2 py-1.5 sticky left-0 bg-gray-200 z-30">ჯამი:</td>{!collapsedBlocks['A'] && <><td colSpan={6}></td><td className="px-2 py-1.5 text-center font-mono">{totals.totalQuantity}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.totalGEL)}</td><td>GEL</td><td className="px-2 py-1.5 text-center font-mono">{totals.totalFloorsOrStops}</td></>}{!collapsedBlocks['B'] && <td colSpan={4} className="border-l"></td>}{!collapsedBlocks['E'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totals.totalUnitPrice)}</td></>}{!collapsedBlocks['C'] && <><td className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(totals.totalGEL)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.receivedGEL)}</td><td className="px-2 py-1.5 text-right font-mono">{formatNumber(totals.remainingGEL)}</td><td></td></>}{!collapsedBlocks['D'] && totals.monthlyTotals.map((total, i) => (<td key={i} className="px-2 py-1.5 text-right font-mono border-l">{formatNumber(total)}</td>))}<td></td></tr></tfoot>
                     </table>
                 </div>
@@ -609,22 +639,23 @@ export const RevenueParts: React.FC = () => {
 
 interface RevenueAnalysisProps {
   category: 'პროექტები' | 'სერვისი' | 'ნაწილები';
+  user: User;
 }
 
 import { NumpadInput } from './NumpadInput';
 
-export const RevenueAnalysis: React.FC<RevenueAnalysisProps> = ({ category }) => {
+export const RevenueAnalysis: React.FC<RevenueAnalysisProps> = ({ category, user }) => {
   
   if (category === 'პროექტები') {
-    return <RevenueProjects />;
+    return <RevenueProjects user={user} />;
   }
 
   if (category === 'სერვისი') {
-    return <RevenueService />;
+    return <RevenueService user={user} />;
   }
   
   if (category === 'ნაწილები') {
-    return <RevenueParts />;
+    return <RevenueParts user={user} />;
   }
 
   // Fallback, should not be reached with current routing
