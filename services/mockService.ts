@@ -163,6 +163,7 @@ export const resetDatabase = async () => {
   MOCK_PROJECTS = [];
   MOCK_SERVICES = [];
   MOCK_PARTS = [];
+  ACTIVITY_LOGS = [];
   INVOICES = [];
   CURRENT_YEAR_ACTUALS = {};
   DEBTORS = [];
@@ -579,7 +580,7 @@ const syncProjects = () => {
 
 export const getProjects = async (): Promise<ProjectRevenue[]> => [...MOCK_PROJECTS];
 export const addProject = async (projectData: Omit<ProjectRevenue, 'id' | 'status'>): Promise<ProjectRevenue> => {
-  const newProject: ProjectRevenue = { id: `proj_${Date.now()}`, ...projectData, status: 'active' };
+  const newProject: ProjectRevenue = { id: `proj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, ...projectData, status: 'active' };
   MOCK_PROJECTS.push(newProject);
   syncProjects();
   return newProject;
@@ -610,7 +611,7 @@ const syncServices = () => {
 
 export const getServices = async (): Promise<ServiceRevenue[]> => [...MOCK_SERVICES];
 export const addService = async (serviceData: Omit<ServiceRevenue, 'id' | 'status'>): Promise<ServiceRevenue> => {
-  const newService: ServiceRevenue = { id: `serv_${Date.now()}`, ...serviceData, status: 'active' };
+  const newService: ServiceRevenue = { id: `serv_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, ...serviceData, status: 'active' };
   MOCK_SERVICES.push(newService);
   syncServices();
   return newService;
@@ -644,7 +645,7 @@ const syncParts = () => {
 
 export const getParts = async (): Promise<PartRevenue[]> => [...MOCK_PARTS];
 export const addPart = async (partData: Omit<PartRevenue, 'id' | 'status'>): Promise<PartRevenue> => {
-  const newPart: PartRevenue = { id: `part_${Date.now()}`, ...partData, status: 'active' };
+  const newPart: PartRevenue = { id: `part_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, ...partData, status: 'active' };
   MOCK_PARTS.push(newPart);
   syncParts();
   return newPart;
@@ -682,6 +683,7 @@ export const logActivity = async (user: User, action: LogAction | string, detail
   }
   localStorage.setItem('finboard_activity_logs', JSON.stringify(ACTIVITY_LOGS));
   safeEmit('update_state', { key: 'activityLogs', value: ACTIVITY_LOGS });
+  window.dispatchEvent(new Event('finboard_sync'));
 };
 
 export const getAnnualBudget = async (year: number) => {
@@ -1279,7 +1281,7 @@ export const openBoardSession = async (user: User): Promise<BoardSession> => {
 
   // 3. Create new session for the target date (which could be today or next week)
   const session: BoardSession = {
-    id: `board_${Date.now()}`,
+    id: `board_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     weekDate: weekDateStr,
     startTime: now.toISOString(),
     isActive: true,
@@ -1553,7 +1555,7 @@ export const createInvoice = async (invoiceData: Omit<Invoice, 'id' | 'status' |
   const currentYear = new Date().getFullYear();
   const count = INVOICES.length + 1;
   const invoiceNumber = `${currentYear}${count.toString().padStart(3, '0')}-2`;
-  const newInvoice: Invoice = { id: `inv_${Date.now()}`, invoiceNumber, ...invoiceData, status: InvoiceStatus.PENDING_ACCOUNTANT, createdAt: new Date().toISOString() };
+  const newInvoice: Invoice = { id: `inv_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, invoiceNumber, ...invoiceData, status: InvoiceStatus.PENDING_ACCOUNTANT, createdAt: new Date().toISOString() };
   INVOICES.push(newInvoice);
   syncInvoices();
   return newInvoice;
@@ -1603,6 +1605,7 @@ const handleInitState = (state: any) => {
   if (state.projects && state.projects.length > 0) { MOCK_PROJECTS = state.projects; localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS)); hasData = true; }
   if (state.services && state.services.length > 0) { MOCK_SERVICES = state.services; localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES)); hasData = true; }
   if (state.parts && state.parts.length > 0) { MOCK_PARTS = state.parts; localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS)); hasData = true; }
+  if (state.activityLogs && state.activityLogs.length > 0) { ACTIVITY_LOGS = state.activityLogs; localStorage.setItem('finboard_activity_logs', JSON.stringify(ACTIVITY_LOGS)); hasData = true; }
   if (state.boardSessions && state.boardSessions.length > 0) { BOARD_SESSIONS = state.boardSessions; localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS)); hasData = true; }
   if (state.hiddenFunds && Object.keys(state.hiddenFunds).length > 0) { HIDDEN_FUNDS = state.hiddenFunds; localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS)); hasData = true; }
   if (state.dispatchedDirectives && state.dispatchedDirectives.length > 0) { DISPATCHED_DIRECTIVES = state.dispatchedDirectives; localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES)); hasData = true; }
@@ -1641,6 +1644,7 @@ const handleStateUpdated = (data: any) => {
   if (key === 'projects') { MOCK_PROJECTS = applyUpdate(MOCK_PROJECTS); localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS)); }
   if (key === 'services') { MOCK_SERVICES = applyUpdate(MOCK_SERVICES); localStorage.setItem('finboard_services', JSON.stringify(MOCK_SERVICES)); }
   if (key === 'parts') { MOCK_PARTS = applyUpdate(MOCK_PARTS); localStorage.setItem('finboard_parts', JSON.stringify(MOCK_PARTS)); }
+  if (key === 'activityLogs') { ACTIVITY_LOGS = applyUpdate(ACTIVITY_LOGS); localStorage.setItem('finboard_activity_logs', JSON.stringify(ACTIVITY_LOGS)); }
   if (key === 'boardSessions') { BOARD_SESSIONS = applyUpdate(BOARD_SESSIONS); localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS)); }
   if (key === 'hiddenFunds') { HIDDEN_FUNDS = applyUpdate(HIDDEN_FUNDS); localStorage.setItem('finboard_hidden_funds', JSON.stringify(HIDDEN_FUNDS)); }
   if (key === 'dispatchedDirectives') { DISPATCHED_DIRECTIVES = applyUpdate(DISPATCHED_DIRECTIVES); localStorage.setItem('finboard_directives', JSON.stringify(DISPATCHED_DIRECTIVES)); }

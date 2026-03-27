@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ProjectRevenue, ProjectTranche, Currency } from '../types';
-import { getProjects, addProject, updateProject, terminateProject, deleteProject, getCurrencyRates, useSync } from '../services/mockService';
+import { ProjectRevenue, ProjectTranche, Currency, LogAction } from '../types';
+import { getProjects, addProject, updateProject, terminateProject, deleteProject, getCurrencyRates, useSync, logActivity } from '../services/mockService';
 import { User, UserRole } from '../types';
 import { formatNumber } from '../utils/formatters';
 import { FolderKanban, Plus, Download, Upload, Edit2, ChevronDown, ChevronRight, Save, X, Trash2, AlertTriangle, Archive } from 'lucide-react';
@@ -222,8 +222,10 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
     const handleSaveProject = async (projectData: Omit<ProjectRevenue, 'id' | 'status'> | ProjectRevenue) => {
       if ('id' in projectData) {
         await updateProject(projectData.id, projectData);
+        logActivity(user, LogAction.UPDATE_PROJECT, `განახლდა პროექტი: ${projectData.clientName} (${projectData.id})`);
       } else {
-        await addProject(projectData);
+        const newProj = await addProject(projectData);
+        logActivity(user, LogAction.CREATE_PROJECT, `შეიქმნა ახალი პროექტი: ${projectData.clientName} (${newProj.id})`);
       }
       fetchData();
       setIsModalOpen(false);
@@ -232,6 +234,7 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
     const handleConfirmTermination = async (date: string, reason: string) => {
       if (!terminatingProject) return;
       await terminateProject(terminatingProject.id, date, reason);
+      logActivity(user, LogAction.TERMINATE_PROJECT, `შეწყდა პროექტი: ${terminatingProject.clientName} (${terminatingProject.id})`);
       setIsTerminationModalOpen(false);
       setTerminatingProject(null);
       fetchData();
@@ -240,6 +243,7 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
     const handleDeleteProject = async (id: string) => {
         if (window.confirm('ნამდვილად გსურთ პროექტის სამუდამოდ წაშლა?')) {
             await deleteProject(id);
+            logActivity(user, LogAction.DELETE_PROJECT, `სამუდამოდ წაიშალა პროექტი ID: ${id}`);
             fetchData();
         }
     };
@@ -317,6 +321,7 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
                     };
 
                     await addProject(projectData);
+                    logActivity(user, LogAction.CREATE_PROJECT, `პროექტის იმპორტი Excel-იდან: ${projectData.clientName}`);
                 }
                 fetchData();
                 alert('იმპორტი წარმატებით დასრულდა');
@@ -346,6 +351,7 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
 
         if (!isNaN(numericValue)) {
             await updateProject(projectId, { [field]: numericValue });
+            logActivity(user, LogAction.UPDATE_PROJECT, `პროექტის სწრაფი რედაქტირება ${projectId}: ${field} = ${numericValue}`);
             setProjects(projects.map(p => p.id === projectId ? { ...p, [field]: numericValue } : p));
         }
         setEditingCell(null);

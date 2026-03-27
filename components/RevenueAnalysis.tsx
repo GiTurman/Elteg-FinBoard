@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Download, Upload, BarChart2, AlertTriangle, Server, FolderKanban, Plus, Edit2, ChevronDown, ChevronRight, X, Trash2, Package, Archive } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { RevenueProjects } from './RevenueProjects';
-import { ServiceRevenue, PartRevenue, ProjectTranche, Currency, User, UserRole } from '../types';
-import { getServices, addService, updateService, terminateService, deleteService, getParts, addPart, updatePart, terminatePart, deletePart, getCurrencyRates, useSync } from '../services/mockService';
+import { ServiceRevenue, PartRevenue, ProjectTranche, Currency, User, UserRole, LogAction } from '../types';
+import { getServices, addService, updateService, terminateService, deleteService, getParts, addPart, updatePart, terminatePart, deletePart, getCurrencyRates, useSync, logActivity } from '../services/mockService';
 import { formatNumber } from '../utils/formatters';
 import { exportGenericToExcel } from '../utils/excelExport';
 
@@ -181,13 +181,31 @@ export const RevenueService: React.FC<{ user: User }> = ({ user }) => {
     const activeServices = useMemo(() => services.filter(s => s.status === 'active'), [services]);
     const terminatedServices = useMemo(() => services.filter(s => s.status === 'terminated'), [services]);
     
-    const handleSaveService = async (data: Omit<ServiceRevenue, 'id' | 'status'> | ServiceRevenue) => { if ('id' in data) { await updateService(data.id, data); } else { await addService(data); } fetchData(); setIsModalOpen(false); };
+    const handleSaveService = async (data: Omit<ServiceRevenue, 'id' | 'status'> | ServiceRevenue) => { 
+      if ('id' in data) { 
+        await updateService(data.id, data); 
+        logActivity(user, LogAction.UPDATE_SERVICE, `განახლდა სერვისი: ${data.clientName} (${data.id})`);
+      } else { 
+        const newServ = await addService(data); 
+        logActivity(user, LogAction.CREATE_SERVICE, `შეიქმნა ახალი სერვისი: ${data.clientName} (${newServ.id})`);
+      } 
+      fetchData(); 
+      setIsModalOpen(false); 
+    };
     const handleOpenModal = (service: ServiceRevenue | null = null) => { setEditingService(service); setIsModalOpen(true); };
-    const handleConfirmTermination = async (date: string, reason: string) => { if (!terminatingService) return; await terminateService(terminatingService.id, date, reason); setIsTerminationModalOpen(false); setTerminatingService(null); fetchData(); };
+    const handleConfirmTermination = async (date: string, reason: string) => { 
+      if (!terminatingService) return; 
+      await terminateService(terminatingService.id, date, reason); 
+      logActivity(user, LogAction.TERMINATE_SERVICE, `შეწყდა სერვისი: ${terminatingService.clientName} (${terminatingService.id})`);
+      setIsTerminationModalOpen(false); 
+      setTerminatingService(null); 
+      fetchData(); 
+    };
     
     const handleDeleteService = async (id: string) => {
         if (window.confirm('ნამდვილად გსურთ ჩანაწერის სამუდამოდ წაშლა?')) {
             await deleteService(id);
+            logActivity(user, LogAction.DELETE_SERVICE, `სამუდამოდ წაიშალა სერვისი ID: ${id}`);
             fetchData();
         }
     };
@@ -466,13 +484,31 @@ export const RevenueParts: React.FC<{ user: User }> = ({ user }) => {
     const activeParts = useMemo(() => parts.filter(p => p.status === 'active'), [parts]);
     const terminatedParts = useMemo(() => parts.filter(p => p.status === 'terminated'), [parts]);
 
-    const handleSavePart = async (data: Omit<PartRevenue, 'id' | 'status'> | PartRevenue) => { if ('id' in data) { await updatePart(data.id, data); } else { await addPart(data); } fetchData(); setIsModalOpen(false); };
+    const handleSavePart = async (data: Omit<PartRevenue, 'id' | 'status'> | PartRevenue) => { 
+      if ('id' in data) { 
+        await updatePart(data.id, data); 
+        logActivity(user, LogAction.UPDATE_PART, `განახლდა ნაწილი: ${data.clientName} (${data.id})`);
+      } else { 
+        const newPart = await addPart(data); 
+        logActivity(user, LogAction.CREATE_PART, `შეიქმნა ახალი ნაწილი: ${data.clientName} (${newPart.id})`);
+      } 
+      fetchData(); 
+      setIsModalOpen(false); 
+    };
     const handleOpenModal = (part: PartRevenue | null = null) => { setEditingPart(part); setIsModalOpen(true); };
-    const handleConfirmTermination = async (date: string, reason: string) => { if (!terminatingPart) return; await terminatePart(terminatingPart.id, date, reason); setIsTerminationModalOpen(false); setTerminatingPart(null); fetchData(); };
+    const handleConfirmTermination = async (date: string, reason: string) => { 
+      if (!terminatingPart) return; 
+      await terminatePart(terminatingPart.id, date, reason); 
+      logActivity(user, LogAction.TERMINATE_PART, `შეწყდა ნაწილი: ${terminatingPart.clientName} (${terminatingPart.id})`);
+      setIsTerminationModalOpen(false); 
+      setTerminatingPart(null); 
+      fetchData(); 
+    };
 
     const handleDeletePart = async (id: string) => {
         if (window.confirm('ნამდვილად გსურთ ჩანაწერის სამუდამოდ წაშლა?')) {
             await deletePart(id);
+            logActivity(user, LogAction.DELETE_PART, `სამუდამოდ წაიშალა ნაწილი ID: ${id}`);
             fetchData();
         }
     };
