@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 // FIX: Add MasterReportData to type imports
 import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, Priority, BankAccount, RevenueCategory, ExpenseFund, FundBalance, DebtRecord, CashInflowRecord, MasterReportData, ProjectRevenue, ServiceRevenue, PartRevenue, DirectiveSnapshot, Invoice, InvoiceStatus, LogEntry, LogAction } from '../types';
 import { formatNumber } from '../utils/formatters';
+import { isWednesday, nextWednesday, startOfDay } from 'date-fns';
 import { supabase } from '../lib/supabase';
 
 let channel: any = null;
@@ -992,52 +993,25 @@ export const getMatrixDataForDate = async (dateStr: string): Promise<FundBalance
     return { id: fund.id, name: fund.name, totalAllocated: allocated, totalSpent: spent, remaining: allocated - spent };
   });
 };
-
 // ✅ FIX: Roles exempt from Wednesday cutoff
 const EXEMPT_ROLES = [UserRole.FIN_DIRECTOR, UserRole.CEO, UserRole.FOUNDER];
 
 // ✅ FIX 1 & 3: If board is OPEN, all requests get the active session's date
-const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole): Date => {
+const determineBoardDateForRequest = (submissionDate: Date, userRole: UserRole, ignoreActive: boolean = false): Date => {
   // If there is an active board session, ALL requests go into that session's date
-  const active = BOARD_SESSIONS.find(s => s.isActive);
-  if (active) {
-    return new Date(active.weekDate.split('T')[0] + 'T12:00:00.000Z');
+  if (!ignoreActive) {
+    const active = BOARD_SESSIONS.find(s => s.isActive);
+    if (active) {
+      return new Date(active.weekDate.split('T')[0] + 'T12:00:00.000Z');
+    }
   }
 
   // Fallback: calculate next Wednesday
-  const date = new Date(submissionDate);
-  const targetDay = 3; // Wednesday
-  const targetHour = 17;
-  const currentDay = date.getDay();
-  const diff = targetDay - currentDay;
-  const thisWeekWednesday = new Date(date);
-  thisWeekWednesday.setDate(date.getDate() + diff);
-  thisWeekWednesday.setHours(targetHour, 0, 0, 0);
-
-  const todayStr = thisWeekWednesday.toISOString().split('T')[0];
-  // Check if a session for this Wednesday already existed and is now CLOSED
-  const isClosedToday = BOARD_SESSIONS.some(s => s.weekDate.startsWith(todayStr) && !s.isActive);
-
-  if (EXEMPT_ROLES.includes(userRole)) {
-    const thisWeekWednesdayEnd = new Date(thisWeekWednesday);
-    thisWeekWednesdayEnd.setHours(23, 59, 59, 999);
-    // If it's after Wednesday OR the board for today is explicitly closed
-    if (date > thisWeekWednesdayEnd || isClosedToday) {
-      const next = new Date(thisWeekWednesday);
-      next.setDate(thisWeekWednesday.getDate() + 7);
-      return next;
-    }
-    return thisWeekWednesday;
+  let target = submissionDate;
+  if (!isWednesday(target)) {
+    target = nextWednesday(target);
   }
-
-  // For regular users, if it's after Wednesday 17:00 OR the board is closed
-  if (date > thisWeekWednesday || isClosedToday) {
-    const next = new Date(thisWeekWednesday);
-    next.setDate(thisWeekWednesday.getDate() + 7);
-    return next;
-  }
-
-  return thisWeekWednesday;
+  return new Date(target.toISOString().split('T')[0] + 'T12:00:00.000Z');
 };
 
 // ✅ FIX HELPER: Rollover pending requests to the next board date
@@ -1228,16 +1202,22 @@ export const resubmitRequest = async (requestId: string, updates: Partial<Expens
 };
 
 // ✅ FIX 4: Include WAITING_DEPT_APPROVAL so Tech Director's requests show up
-export const getDirectorBoardRequests = async (): Promise<ExpenseRequest[]> => {
-  const active = BOARD_SESSIONS.find(s => s.isActive);
-  if (!active) return [];
-  const targetDate = active.weekDate.split('T')[0];
+export const getDirectorBoardRequests = async (dateStr?: string): Promise<ExpenseRequest[]> => {
+  let targetDate: string;
+  if (dateStr) {
+    targetDate = dateStr.split('T')[0];
+  } else {
+    const active = BOARD_SESSIONS.find(s => s.isActive);
+    if (!active) return [];
+    targetDate = active.weekDate.split('T')[0];
+  }
 
-  const relevantStatuses = [
-    RequestStatus.WAITING_DEPT_APPROVAL,  // ← Tech Director's requests
-    RequestStatus.COUNCIL_REVIEW,
-    RequestStatus.FD_APPROVED,
-  ];
+  const relevantStatuses = dateStr 
+    ? Object.values(RequestStatus) // Show all statuses in archive
+    : [
+        RequestStatus.WAITING_DEPT_APPROVAL,  // ← Tech Director's requests
+        RequestStatus.COUNCIL_REVIEW,
+      ];
   
   return REQUESTS
     .filter(r => 
@@ -1253,33 +1233,39 @@ export const getBoardSession = async (): Promise<BoardSession | null> => {
     return BOARD_SESSIONS.find(s => s.isActive) || null;
 };
 
-// ✅ FIX 3: openBoardSession — remove Wednesday restriction, normalize existing requests
+// ✅ FIX 3: openBoardSession — ensure it always finds a FRESH date slot
 export const openBoardSession = async (user: User): Promise<BoardSession> => {
   const now = new Date();
-  const targetDate = determineBoardDateForRequest(now, user.role);
-  const targetDateStr = targetDate.toISOString().split('T')[0];
+  
+  // 0. Deactivate any currently active session
+  BOARD_SESSIONS.forEach(s => {
+    if (s.isActive) {
+      s.isActive = false;
+      if (!s.endTime) s.endTime = now.toISOString();
+    }
+  });
+
+  // 1. Find the latest session date in the system to ensure we move FORWARD
+  let latestDate = now;
+  if (BOARD_SESSIONS.length > 0) {
+    const dates = BOARD_SESSIONS.map(s => new Date(s.weekDate).getTime());
+    const maxTime = Math.max(...dates);
+    latestDate = new Date(maxTime);
+  }
+
+  // 2. Calculate the next Wednesday from the latest date
+  let targetDate = isWednesday(latestDate) ? latestDate : nextWednesday(latestDate);
+  let targetDateStr = targetDate.toISOString().split('T')[0];
+
+  // 3. If this date already exists (even if we just calculated it), move +7 days
+  while (BOARD_SESSIONS.some(s => s.weekDate.startsWith(targetDateStr))) {
+      targetDate.setDate(targetDate.getDate() + 7);
+      targetDateStr = targetDate.toISOString().split('T')[0];
+  }
+
   const weekDateStr = targetDateStr + 'T12:00:00.000Z';
 
-  // 1. Check if there's already an active session
-  const existingActive = BOARD_SESSIONS.find(s => s.isActive);
-  if (existingActive) {
-    // Pull in any pending requests to this session
-    rolloverPendingRequests(existingActive.weekDate.split('T')[0]);
-    return existingActive;
-  }
-
-  // 2. Check if a session for the target date already exists (even if closed) — reopen it
-  // This allows reopening a board if it was closed by mistake, but only for the target date
-  const existingSession = BOARD_SESSIONS.find(s => s.weekDate.split('T')[0] === targetDateStr);
-  if (existingSession) {
-    existingSession.isActive = true;
-    syncBoardSessions();
-    localStorage.setItem('finboard_council_step', '1');
-    rolloverPendingRequests(targetDateStr);
-    return existingSession;
-  }
-
-  // 3. Create new session for the target date (which could be today or next week)
+  // 4. Create new session
   const session: BoardSession = {
     id: `board_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     weekDate: weekDateStr,
@@ -1292,7 +1278,8 @@ export const openBoardSession = async (user: User): Promise<BoardSession> => {
   BOARD_SESSIONS.push(session);
   syncBoardSessions();
   localStorage.setItem('finboard_council_step', '1');
-  // ✅ Pull in ALL pending requests to this session's date
+  
+  // ✅ Pull in ALL pending requests to this new session's date
   rolloverPendingRequests(targetDateStr);
   return session;
 };
@@ -1306,14 +1293,21 @@ export const closeBoardSession = async (user: User): Promise<BoardSession | null
         // Rollover logic: Move pending requests to the NEXT board date
         const nextDate = new Date(active.weekDate);
         nextDate.setDate(nextDate.getDate() + 7);
-        rolloverPendingRequests(nextDate.toISOString().split('T')[0]);
+        const nextDateStr = nextDate.toISOString().split('T')[0];
+        rolloverPendingRequests(nextDateStr);
+
+        syncBoardSessions();
+        localStorage.removeItem('finboard_council_step');
+        
+        // Log the closing
+        logActivity(user, LogAction.CLOSE_BOARD, `Board session for ${active.weekDate.split('T')[0]} closed by ${user.name}. Requests rolled over to ${nextDateStr}.`);
+
+        // Automatically open the next session
+        return await openBoardSession(user);
     }
     
     syncBoardSessions();
     localStorage.removeItem('finboard_council_step');
-
-    // We don't automatically open a new session anymore, 
-    // the user will do it from the archive view when they are ready.
     return null;
 };
 
@@ -1331,19 +1325,33 @@ export const getArchivedBoardSessions = async (): Promise<BoardSession[]> => {
       .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
 };
 
-export const getFdFinalRequests = async (): Promise<ExpenseRequest[]> => {
-    const active = BOARD_SESSIONS.find(s => s.isActive);
-    if (!active) return [];
-    const targetDate = active.weekDate.split('T')[0];
+export const getFdFinalRequests = async (dateStr?: string): Promise<ExpenseRequest[]> => {
+    let targetDate: string;
+    if (dateStr) {
+        targetDate = dateStr.split('T')[0];
+    } else {
+        const active = BOARD_SESSIONS.find(s => s.isActive);
+        if (!active) return [];
+        targetDate = active.weekDate.split('T')[0];
+    }
+    const relevantStatuses = dateStr
+        ? [RequestStatus.FD_APPROVED, RequestStatus.DISPATCHED_TO_ACCOUNTING, RequestStatus.PAID]
+        : [RequestStatus.FD_APPROVED];
+
     return REQUESTS.filter(r => 
-        r.status === RequestStatus.FD_APPROVED && 
+        relevantStatuses.includes(r.status) && 
         r.boardDate && r.boardDate.startsWith(targetDate)
     );
 };
 
-export const getDispatchedRequests = async (): Promise<ExpenseRequest[]> => {
-    const active = BOARD_SESSIONS.find(s => s.isActive);
-    const targetDate = active ? active.weekDate.split('T')[0] : null;
+export const getDispatchedRequests = async (dateStr?: string): Promise<ExpenseRequest[]> => {
+    let targetDate: string | null;
+    if (dateStr) {
+        targetDate = dateStr.split('T')[0];
+    } else {
+        const active = BOARD_SESSIONS.find(s => s.isActive);
+        targetDate = active ? active.weekDate.split('T')[0] : null;
+    }
 
     return REQUESTS
       .filter(r => {

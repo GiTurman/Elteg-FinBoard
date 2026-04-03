@@ -288,7 +288,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   useEffect(() => {
     if (currentStep === 11) { 
       const fetchFinal = async () => {
-        const data = await getFdFinalRequests();
+        const data = await getFdFinalRequests(selectedSessionDate || undefined);
         setFinalRequests(data);
       };
       fetchFinal();
@@ -298,7 +298,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   useEffect(() => {
     if (currentStep === 12 || currentStep === 13) { 
       const fetchStep12Data = async () => {
-        const dispatched = await getDispatchedRequests();
+        const dispatched = await getDispatchedRequests(selectedSessionDate || undefined);
         setDispatchedHistory(dispatched);
       };
       fetchStep12Data();
@@ -442,11 +442,25 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   
   // === BOARD SESSION LIFECYCLE ===
   const handleOpenBoard = async () => {
-    const session = await openBoardSession(user);
-    setActiveBoardSession(session);
-    setSelectedSessionDate(null);
-    setCurrentStep(1);
-    logActivity(user, LogAction.OPEN_BOARD, `Board session opened for week ${session.weekDate}`);
+    try {
+      const session = await openBoardSession(user);
+      
+      // Reset ALL UI states to ensure fresh start
+      setSelectedSessionDate(null);
+      setActiveBoardSession(session);
+      setCurrentStep(1);
+      
+      // Clear data states
+      setBankAccounts([]);
+      setRevenueCategories([]);
+      setFinalRequests([]);
+      setDispatchedHistory([]);
+      setReportData(null);
+      
+      logActivity(user, LogAction.OPEN_BOARD, `Board session opened for week ${session.weekDate}`);
+    } catch (e) {
+      alert("Error opening board");
+    }
   };
 
   const handleCloseBoard = async () => {
@@ -1154,7 +1168,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
             
             {currentStep === 3 && (
               <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-                 <DirectorApprovals user={user} currentStep={currentStep} />
+                 <DirectorApprovals user={user} currentStep={currentStep} initialSelectedDate={selectedSessionDate || undefined} />
                  <div className="flex justify-between pt-8 mt-8 border-t border-gray-200">
                     <button onClick={() => setCurrentStep(currentStep - 1)} className="text-gray-500 hover:text-black font-bold uppercase text-xs">უკან</button>
                     <button onClick={() => setCurrentStep(currentStep + 1)} className="bg-black text-white px-8 py-4 font-bold uppercase rounded-lg">შემდეგი</button>

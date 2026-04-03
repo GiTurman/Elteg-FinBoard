@@ -115,6 +115,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
   const syncTrigger = useSync();
   const isFinDirector = user.role === UserRole.FIN_DIRECTOR;
   const isDirectorLevel = user.role === UserRole.CEO || user.role === UserRole.FOUNDER;
+  const isReadOnly = !!initialSelectedDate;
 
   const loadData = async () => {
     setLoading(true);
@@ -123,7 +124,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
       const [fundData, balanceData, boardRequests] = await Promise.all([
         getExpenseFunds(),
         getRealTimeFundBalances(),
-        getDirectorBoardRequests(),
+        getDirectorBoardRequests(initialSelectedDate),
       ]);
       setFunds(fundData);
       setFundBalances(balanceData);
@@ -453,7 +454,7 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
                       <StatusControl
                         current={notes[req.id]?.fin}
                         onChange={(val) => handleSignatureChange(req.id, 'fin', val)}
-                        disabled={!isFinDirector}
+                        disabled={!isFinDirector || isReadOnly}
                       />
                     </td>
 
@@ -462,13 +463,21 @@ export const DirectorApprovals: React.FC<DirectorApprovalsProps> = ({ user, curr
                       <StatusControl
                         current={notes[req.id]?.director}
                         onChange={(val) => handleSignatureChange(req.id, 'director', val)}
-                        disabled={!isDirectorLevel}
+                        disabled={!isDirectorLevel || isReadOnly}
                       />
                     </td>
 
                     {/* Actions */}
                     <td className="px-3 py-3 text-center sticky right-0 bg-white border-l border-gray-300 z-10 align-top">
-                      {processingId === req.id ? (
+                      {isReadOnly ? (
+                        <button
+                          onClick={() => setSelectedRequest(req)}
+                          className="p-1.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-600"
+                          title="დეტალები"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      ) : processingId === req.id ? (
                         <span className="text-[10px] text-gray-400 animate-pulse">მუშავდება...</span>
                       ) : (
                         <div className="flex flex-col items-center gap-1.5">
