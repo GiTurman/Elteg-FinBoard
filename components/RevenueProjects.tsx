@@ -118,8 +118,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, in
     setFormData(prev => ({...prev, tranches: prev.tranches.filter((_, i) => i !== index)}));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const totalPercentage = formData.tranches.reduce((sum, t) => sum + (Number(t.percentage) || 0), 0);
     if (totalPercentage !== 100) {
       setError(`ტრანშების ჯამური პროცენტი უნდა იყოს 100%. ამჟამად არის ${totalPercentage}%.`);
@@ -139,7 +139,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, in
         <div className="p-4 border-b">
           <h3 className="font-bold text-lg">{initialData ? 'პროექტის კორექტირება' : 'ახალი პროექტის დამატება'}</h3>
         </div>
-        <form onSubmit={handleSubmit} className="overflow-y-auto p-4 space-y-4">
+        <form id="project-form" onSubmit={handleSubmit} className="overflow-y-auto p-4 space-y-4">
           {/* Section A */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
              <input type="text" placeholder="დამკვეთი" value={formData.clientName} onChange={e => handleChange('clientName', e.target.value)} required className="px-2.5 py-1.5 text-sm border rounded"/>
@@ -178,8 +178,8 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, in
 
         </form>
         <div className="p-3 border-t flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 border rounded font-bold text-sm">გაუქმება</button>
-          <button onClick={handleSubmit} className="px-4 py-2 bg-black text-white rounded font-bold text-sm">შენახვა</button>
+          <button type="button" onClick={onClose} className="px-4 py-2 border rounded font-bold text-sm">გაუქმება</button>
+          <button type="submit" form="project-form" className="px-4 py-2 bg-black text-white rounded font-bold text-sm">შენახვა</button>
         </div>
       </div>
     </div>
@@ -209,7 +209,19 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
     const fetchData = async () => {
         setLoading(true);
         const [projectData, currencyRates] = await Promise.all([getProjects(), getCurrencyRates()]);
-        setProjects(projectData);
+        
+        // Deduplicate by ID to prevent React key errors if data is corrupted in localStorage
+        const uniqueProjects: ProjectRevenue[] = [];
+        const seenIds = new Set();
+        
+        projectData.forEach(p => {
+            if (!seenIds.has(p.id)) {
+                seenIds.add(p.id);
+                uniqueProjects.push(p);
+            }
+        });
+
+        setProjects(uniqueProjects);
         setRates(currencyRates);
         setLoading(false);
     };
@@ -224,6 +236,12 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
         await updateProject(projectData.id, projectData);
         logActivity(user, LogAction.UPDATE_PROJECT, `განახლდა პროექტი: ${projectData.clientName} (${projectData.id})`);
       } else {
+        const existingProjects = await getProjects();
+        const duplicate = existingProjects.find(p => p.contractNumber === projectData.contractNumber && p.status === 'active');
+        if (duplicate) {
+            alert('პროექტი ამ კონტრაქტის ნომრით უკვე არსებობს აქტიურებში!');
+            return;
+        }
         const newProj = await addProject(projectData);
         logActivity(user, LogAction.CREATE_PROJECT, `შეიქმნა ახალი პროექტი: ${projectData.clientName} (${newProj.id})`);
       }
@@ -285,6 +303,7 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
                 const rows = jsonData.slice(1);
+                let currentProjects = await getProjects();
                 
                 for (const row of rows) {
                     if (!row[0]) continue;
@@ -295,7 +314,7 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
                         const pct = parseFloat(row[baseIdx]);
                         if (!isNaN(pct) && pct > 0) {
                             tranches.push({
-                                id: `tr_${Date.now()}_${i}`,
+                                id: `tr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}_${i}`,
                                 percentage: pct,
                                 month: (parseInt(row[baseIdx + 1]) || 1) - 1,
                                 year: parseInt(row[baseIdx + 2]) || CURRENT_YEAR
@@ -303,10 +322,11 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
                         }
                     }
 
+                    const contractNumber = String(row[2] || '');
                     const projectData: Omit<ProjectRevenue, 'id' | 'status'> = {
                         clientName: String(row[0] || ''),
                         contractDate: String(row[1] || new Date().toISOString().split('T')[0]),
-                        contractNumber: String(row[2] || ''),
+                        contractNumber: contractNumber,
                         durationInWeeks: parseFloat(row[3]) || 1,
                         productType: String(row[4] || ''),
                         brand: String(row[5] || ''),
@@ -317,11 +337,20 @@ export const RevenueProjects: React.FC<{ user: User }> = ({ user }) => {
                         value: parseFloat(row[10]) || 0,
                         currency: (row[11] as Currency) || Currency.GEL,
                         totalReceived: parseFloat(row[12]) || 0,
-                        tranches: tranches.length > 0 ? tranches : [{ id: `tr_${Date.now()}`, percentage: 100, month: 0, year: CURRENT_YEAR }]
+                        tranches: tranches.length > 0 ? tranches : [{ id: `tr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, percentage: 100, month: 0, year: CURRENT_YEAR }]
                     };
 
-                    await addProject(projectData);
-                    logActivity(user, LogAction.CREATE_PROJECT, `პროექტის იმპორტი Excel-იდან: ${projectData.clientName}`);
+                    const existing = currentProjects.find(p => p.contractNumber === contractNumber && p.status === 'active');
+                    if (existing) {
+                        await updateProject(existing.id, projectData);
+                        logActivity(user, LogAction.UPDATE_PROJECT, `პროექტის განახლება იმპორტით: ${projectData.clientName}`);
+                        // Update local list for next iterations
+                        currentProjects = currentProjects.map(p => p.id === existing.id ? { ...p, ...projectData } : p);
+                    } else {
+                        const newProj = await addProject(projectData);
+                        logActivity(user, LogAction.CREATE_PROJECT, `პროექტის იმპორტი Excel-იდან: ${projectData.clientName}`);
+                        currentProjects.push(newProj);
+                    }
                 }
                 fetchData();
                 alert('იმპორტი წარმატებით დასრულდა');

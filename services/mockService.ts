@@ -747,6 +747,8 @@ export const addCurrentWeekCashInflowEntry = async (entry: Partial<CashInflowRec
     id: `cw_${Date.now()}_${Math.random()}`,
     name: entry.name || '', 
     category: entry.category || 'პროექტები',
+    currency: entry.currency || Currency.GEL,
+    rate: entry.rate || 1,
     budgeted: entry.budgeted || 0, actual: entry.actual || 0,
     comment: entry.comment || '',
     authorId, timestamp: new Date().toISOString(),

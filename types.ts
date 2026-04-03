@@ -144,6 +144,8 @@ export interface CashInflowRecord {
   id: string;
   name: string;
   category: 'პროექტები' | 'სერვისები' | 'ნაწილები';
+  currency: Currency;
+  rate: number;
   budgeted: number;
   actual: number;
   comment: string;
