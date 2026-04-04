@@ -1,7 +1,7 @@
 // FIX: Add GoogleGenAI import for AI summary generation
 import { GoogleGenAI } from '@google/genai';
 // FIX: Add MasterReportData to type imports
-import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, Priority, BankAccount, RevenueCategory, ExpenseFund, FundBalance, DebtRecord, CashInflowRecord, MasterReportData, ProjectRevenue, ServiceRevenue, PartRevenue, DirectiveSnapshot, Invoice, InvoiceStatus, LogEntry, LogAction } from '../types';
+import { User, UserRole, ExpenseRequest, RequestStatus, BoardSession, Currency, Priority, BankAccount, RevenueCategory, ExpenseFund, FundBalance, DebtRecord, CashInflowRecord, MasterReportData, ProjectRevenue, ServiceRevenue, PartRevenue, DirectiveSnapshot, Invoice, InvoiceStatus, LogEntry, LogAction, FinancialSession, BoardSessionParams } from '../types';
 import { formatNumber } from '../utils/formatters';
 import { isWednesday, nextWednesday, startOfDay } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -137,7 +137,17 @@ localStorage.removeItem('finboard_users');
 REQUESTS = [];
 try {
     const storedReqs = localStorage.getItem('finboard_requests');
-    if (storedReqs) REQUESTS = JSON.parse(storedReqs);
+    if (storedReqs) {
+        const parsed = JSON.parse(storedReqs);
+        if (Array.isArray(parsed)) {
+            const seen = new Set();
+            REQUESTS = parsed.filter(r => {
+                if (seen.has(r.id)) return false;
+                seen.add(r.id);
+                return true;
+            });
+        }
+    }
 } catch(e) {}
 
 function safeEmit(event: string, data: any) {
@@ -151,6 +161,12 @@ function safeEmit(event: string, data: any) {
 }
 
 const syncRequests = () => {
+    const seen = new Set();
+    REQUESTS = REQUESTS.filter(r => {
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+    });
     localStorage.setItem('finboard_requests', JSON.stringify(REQUESTS));
     safeEmit('update_state', { key: 'requests', value: REQUESTS });
 };
@@ -334,13 +350,29 @@ HIDDEN_FUNDS = {};
 DISPATCHED_DIRECTIVES = [];
 
 const syncBoardSessions = () => {
+    const seen = new Set();
+    BOARD_SESSIONS = BOARD_SESSIONS.filter(s => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+    });
     localStorage.setItem('finboard_board_sessions', JSON.stringify(BOARD_SESSIONS));
     safeEmit('update_state', { key: 'boardSessions', value: BOARD_SESSIONS });
 };
 
 try {
     const sBoardSessions = localStorage.getItem('finboard_board_sessions');
-    if (sBoardSessions) BOARD_SESSIONS = JSON.parse(sBoardSessions);
+    if (sBoardSessions) {
+        const parsed = JSON.parse(sBoardSessions);
+        if (Array.isArray(parsed)) {
+            const seen = new Set();
+            BOARD_SESSIONS = parsed.filter(s => {
+                if (seen.has(s.id)) return false;
+                seen.add(s.id);
+                return true;
+            });
+        }
+    }
     
     const sHiddenFunds = localStorage.getItem('finboard_hidden_funds');
     if (sHiddenFunds) HIDDEN_FUNDS = JSON.parse(sHiddenFunds);
@@ -515,7 +547,7 @@ export const EXPENSE_FUNDS: ExpenseFund[] = [
   { id: 'fund_adj_office', name: 'საოფისე და ადმინისტრაციული', description: 'Office & Admin', category: 'Adjustable' },
   { id: 'fund_adj_marketing', name: 'რეკლამა და მარკეტინგის ფონდი', description: 'Ads & Marketing', category: 'Adjustable' },
   { id: 'fund_adj_assets', name: 'ძირითადი საშუალებების', description: 'Fixed Assets', category: 'Adjustable' },
-  { id: 'fund_adj_travel', name: 'სამივლინებო ხარჯები', description: 'Travel Expenses', category: 'Adjustable' },
+  { id: 'fund_adj_travel', name: 'მივლინება (Business Trips)', description: 'Travel & Business Trips', category: 'Adjustable' },
   { id: 'fund_adj_rep', name: 'წარმომადგენლობითი', description: 'Representation', category: 'Adjustable' },
   { id: 'fund_adj_other', name: 'სხვა ხარჯები', description: 'Other Expenses', category: 'Adjustable' },
   { id: 'fund_special_reserve', name: 'სარეზერვო ფონდი', description: 'Reserve Fund', category: 'Special' },
@@ -571,9 +603,25 @@ export const updateBudgetAnalysisComment = async (fundId: string, comment: strin
 MOCK_PROJECTS = [];
 try {
     const sProjects = localStorage.getItem('finboard_projects');
-    if (sProjects) MOCK_PROJECTS = JSON.parse(sProjects);
+    if (sProjects) {
+        const parsed = JSON.parse(sProjects);
+        if (Array.isArray(parsed)) {
+            const seen = new Set();
+            MOCK_PROJECTS = parsed.filter(p => {
+                if (seen.has(p.id)) return false;
+                seen.add(p.id);
+                return true;
+            });
+        }
+    }
 } catch(e) {}
 const syncProjects = () => {
+    const seen = new Set();
+    MOCK_PROJECTS = MOCK_PROJECTS.filter(p => {
+        if (seen.has(p.id)) return false;
+        seen.add(p.id);
+        return true;
+    });
     localStorage.setItem('finboard_projects', JSON.stringify(MOCK_PROJECTS));
     safeEmit('update_state', { key: 'projects', value: MOCK_PROJECTS });
     window.dispatchEvent(new Event('finboard_sync'));
@@ -581,7 +629,9 @@ const syncProjects = () => {
 
 export const getProjects = async (): Promise<ProjectRevenue[]> => [...MOCK_PROJECTS];
 export const addProject = async (projectData: Omit<ProjectRevenue, 'id' | 'status'>): Promise<ProjectRevenue> => {
-  const newProject: ProjectRevenue = { id: `proj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, ...projectData, status: 'active' };
+  // Use a more robust ID generation to avoid duplicates
+  const id = `proj_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+  const newProject: ProjectRevenue = { id, ...projectData, status: 'active' };
   MOCK_PROJECTS.push(newProject);
   syncProjects();
   return newProject;
@@ -909,17 +959,7 @@ export const getRealTimeFundBalances = async (): Promise<FundBalance[]> => {
   });
 };
 
-export interface FinancialSession {
-  id: string;
-  weekNumber: number;
-  periodStart: string;
-  periodEnd: string;
-  dateConducted: string;
-  totalRevenue: number;
-  totalAmount: number;
-  netBalance: number;
-  status: 'active' | 'archived';
-}
+// Removed local FinancialSession interface as it is now in types.ts
 
 const buildSession = (dateStr: string, reqs: ExpenseRequest[], isActive: boolean): FinancialSession => {
   const date = new Date(dateStr + 'T12:00:00.000Z');
@@ -1235,55 +1275,34 @@ export const getBoardSession = async (): Promise<BoardSession | null> => {
     return BOARD_SESSIONS.find(s => s.isActive) || null;
 };
 
-// ✅ FIX 3: openBoardSession — ensure it always finds a FRESH date slot
-export const openBoardSession = async (user: User): Promise<BoardSession> => {
+// ✅ FIX: openBoardSession — ensure it always finds a FRESH date slot
+export const openBoardSession = async (
+  user: User,
+  params?: BoardSessionParams
+): Promise<BoardSession> => {
   const now = new Date();
   
-  // 0. Deactivate any currently active session
-  BOARD_SESSIONS.forEach(s => {
-    if (s.isActive) {
-      s.isActive = false;
-      if (!s.endTime) s.endTime = now.toISOString();
-    }
-  });
-
-  // 1. Find the latest session date in the system to ensure we move FORWARD
-  let latestDate = now;
-  if (BOARD_SESSIONS.length > 0) {
-    const dates = BOARD_SESSIONS.map(s => new Date(s.weekDate).getTime());
-    const maxTime = Math.max(...dates);
-    latestDate = new Date(maxTime);
-  }
-
-  // 2. Calculate the next Wednesday from the latest date
-  let targetDate = isWednesday(latestDate) ? latestDate : nextWednesday(latestDate);
-  let targetDateStr = targetDate.toISOString().split('T')[0];
-
-  // 3. If this date already exists (even if we just calculated it), move +7 days
-  while (BOARD_SESSIONS.some(s => s.weekDate.startsWith(targetDateStr))) {
-      targetDate.setDate(targetDate.getDate() + 7);
-      targetDateStr = targetDate.toISOString().split('T')[0];
-  }
-
-  const weekDateStr = targetDateStr + 'T12:00:00.000Z';
-
-  // 4. Create new session
-  const session: BoardSession = {
-    id: `board_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-    weekDate: weekDateStr,
+  // If params are not provided, calculate defaults (e.g. for automatic rollover)
+  const weekDate = params?.weekDate || nextWednesday(now).toISOString();
+  
+  const newSession: BoardSession = {
+    id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    weekDate: weekDate,
     startTime: now.toISOString(),
     isActive: true,
-    attendees: [user.id],
-    initiatorId: user.id,
+    attendees: params?.attendees || [],
+    initiatorId: user.id
   };
 
-  BOARD_SESSIONS.push(session);
+  BOARD_SESSIONS.push(newSession);
   syncBoardSessions();
   localStorage.setItem('finboard_council_step', '1');
   
   // ✅ Pull in ALL pending requests to this new session's date
+  const targetDateStr = weekDate.split('T')[0];
   rolloverPendingRequests(targetDateStr);
-  return session;
+  
+  return newSession;
 };
 
 export const closeBoardSession = async (user: User): Promise<BoardSession | null> => {

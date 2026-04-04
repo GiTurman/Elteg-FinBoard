@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, UserRole, ExpenseRequest, RequestStatus, BankAccount, RevenueCategory, MasterReportData, DebtRecord, FundBalance, Currency, LogAction } from '../types';
+import { User, UserRole, ExpenseRequest, RequestStatus, BankAccount, RevenueCategory, MasterReportData, DebtRecord, FundBalance, Currency, LogAction, FinancialSession } from '../types';
 import {
   getFundDistributionRules,
   getFdFinalRequests,
@@ -15,7 +15,6 @@ import {
   syncBankAccounts,
   updateBankAccountSyncStatus,
   getFinancialCouncilSessions,
-  FinancialSession,
   getMatrixDataForDate,
   getDebtors,
   getCreditors,
@@ -334,8 +333,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
     return all.filter(
       (r) =>
         r.status === RequestStatus.COUNCIL_REVIEW ||
-        r.status === RequestStatus.PENDING ||
-        r.status === RequestStatus.APPROVED_BY_DEPARTMENT
+        r.status === RequestStatus.WAITING_DEPT_APPROVAL
     );
   };
 
@@ -531,16 +529,70 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
    * Called only from Step 13 after the report is finalized.
    */
   const handleCloseBoard = async () => {
-    if (!window.confirm('საბჭო დაიხურება და ახალი კვირის საბჭო ავტომატურად გაიხსნება. გავაგრძელოთ?'))
-      return;
+  if (!activeBoardSession) return;
 
-    const weekDate = activeBoardSession?.weekDate || 'N/A';
-    await closeBoardSession(user);
-    logActivity(user, LogAction.CLOSE_BOARD, `Board session closed for week ${weekDate}`);
+  const confirmClose = window.confirm(
+    "დარწმუნებული ხართ, რომ გსურთ მიმდინარე საბჭოს დახურვა და შემდეგი კვირის გახსნა?"
+  );
 
-    // Auto-open next week's board (with carryover logic inside)
-    await handleOpenBoard();
-  };
+  if (confirmClose) {
+    try {
+      // 1. მიმდინარე სესიის მონაცემების აღება
+      const currentWeekNumber = parseInt(activeBoardSession.weekName.replace(/[^0-9]/g, '')) || 15;
+      const nextWeekNumber = currentWeekNumber + 1;
+
+      // 2. თარიღების გამოთვლა (წინა სესიის დასრულებიდან + 1 დღე)
+      // მაგალითი: თუ #15 მთავრდება 08/04/2026-ში, #16 დაიწყება 09/04/2026-ში
+      const lastEndDate = new Date(activeBoardSession.endDate);
+      const nextStartDate = new Date(lastEndDate);
+      nextStartDate.setDate(lastEndDate.getDate() + 1);
+      
+      const nextEndDate = new Date(nextStartDate);
+      nextEndDate.setDate(nextStartDate.getDate() + 6); // 7 დღიანი ინტერვალი
+
+      // 3. 17:00 საათის ლიმიტის შემოწმება მონაცემების გადატანისას
+      const cutOffDate = new Date("2026-04-01T17:00:00"); 
+      // რეალურ სისტემაში აქ უნდა იყოს დინამიური თარიღი: 
+      // const cutOffDate = new Date(nextStartDate); cutOffDate.setHours(17, 0, 0);
+
+      // 4. მიმდინარე სესიის დახურვა
+      await closeBoardSession(user);
+
+      // 5. მოთხოვნების წამოღება გადასატანად (Carry-over)
+      const pendingReqs = await getPendingRequestsForCarryover();
+      
+      // ფილტრაცია თქვენი წესის მიხედვით: 17:00-მდე შეყვანილი ინფორმაცია
+      const reqsToCarry = pendingReqs.filter(req => {
+        const createdAt = new Date(req.createdAt);
+        return createdAt <= cutOffDate;
+      });
+
+      // 6. ახალი სესიის გახსნა (მაისში გადახტომის გარეშე)
+      const nextSession = await openBoardSession(user, {
+        weekNumber: nextWeekNumber,
+        periodStart: nextStartDate.toISOString(),
+        periodEnd: nextEndDate.toISOString(),
+        weekDate: nextStartDate.toISOString(),
+        cutoffTime: "17:00"
+      });
+
+      // 7. მონაცემების გადაბმა ახალ სესიაზე
+      if (reqsToCarry.length > 0) {
+        for (const req of reqsToCarry) {
+          await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, user.id);
+        }
+        logActivity(user, 'SYSTEM', `გადატანილია ${reqsToCarry.length} მოთხოვნა კვირა #${nextWeekNumber}-ში`);
+      }
+
+      alert(`საბჭო დაიხურა. გახსნილია კვირა #${nextWeekNumber} (${nextStartDate.toLocaleDateString()} - ${nextEndDate.toLocaleDateString()})`);
+      window.location.reload();
+
+    } catch (error) {
+      console.error("შეცდომა სესიის დახურვისას:", error);
+      alert("ვერ მოხერხდა სესიის დახურვა.");
+    }
+  }
+};
 
   // ─────────────────────────────────────────────
   // BANK ACCOUNT ACTIONS
@@ -1889,68 +1941,75 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                             <tr>
                               <th className="px-3 py-3 border-r">მომთხოვნი</th>
                               <th className="px-3 py-3 border-r">ხარჯის დასახელება</th>
-                              <th className="px-3 py-3 border-r text-right">ჯამური თანხა</th>
+                              <th className="px-3 py-3 border-r">ვალუტა</th>
+                              <th className="px-3 py-3 border-r text-right">თანხა (ორიგინალი)</th>
+                              <th className="px-3 py-3 border-r text-right">ჯამური თანხა (GEL)</th>
                               <th className="px-3 py-3 border-r">დაფინანსების წყარო</th>
                               <th className="px-3 py-3 border-r text-center">ხელმოწერები</th>
                               <th className="px-3 py-3 text-center">მოქმედება</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200">
-                            {finalRequests.map((req) => (
-                              <tr key={req.id}>
-                                <td className="px-3 py-2 border-r">{req.requesterName}</td>
-                                <td className="px-3 py-2 border-r">{req.itemName || req.category}</td>
-                                <td className="px-3 py-2 border-r text-right font-bold">
-                                  {formatNumber(
-                                    req.totalAmount *
-                                      (req.currency === Currency.USD
-                                        ? MOCK_RATES.USD
-                                        : req.currency === Currency.EUR
-                                        ? MOCK_RATES.EUR
-                                        : 1)
-                                  )}{' '}
-                                  GEL
-                                  {req.currency !== Currency.GEL && (
-                                    <div className="text-[9px] text-gray-400">
-                                      ({formatNumber(req.totalAmount)} {req.currency})
+                            {finalRequests.map((req) => {
+                              const rate = req.currency === Currency.USD ? MOCK_RATES.USD : req.currency === Currency.EUR ? MOCK_RATES.EUR : 1;
+                              const amountInGEL = req.totalAmount * rate;
+                              return (
+                                <tr key={req.id}>
+                                  <td className="px-3 py-2 border-r">{req.requesterName}</td>
+                                  <td className="px-3 py-2 border-r">{req.itemName || req.category}</td>
+                                  <td className="px-3 py-2 border-r text-center font-bold text-gray-500">{req.currency}</td>
+                                  <td className="px-3 py-2 border-r text-right font-mono">{formatNumber(req.totalAmount)}</td>
+                                  <td className="px-3 py-2 border-r text-right font-bold font-mono text-red-600">
+                                    {formatNumber(amountInGEL)} GEL
+                                  </td>
+                                  <td className="px-3 py-2 border-r">{getFundName(req.assignedFundId)}</td>
+                                  <td className="px-3 py-2 border-r text-center">
+                                    <div className="flex justify-center items-center gap-2">
+                                      {req.finDirectorNote === 'დასტურდება' && (
+                                        <span className="flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold border border-blue-100">
+                                          FD <Check size={12} />
+                                        </span>
+                                      )}
+                                      {req.directorNote === 'დასტურდება' && (
+                                        <span className="flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold border border-blue-100">
+                                          CEO <Check size={12} />
+                                        </span>
+                                      )}
                                     </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 border-r">{getFundName(req.assignedFundId)}</td>
-                                <td className="px-3 py-2 border-r text-center">
-                                  <div className="flex justify-center items-center gap-2">
-                                    {req.finDirectorNote === 'დასტურდება' && (
-                                      <span className="flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold border border-blue-100">
-                                        FD <Check size={12} />
-                                      </span>
-                                    )}
-                                    {req.directorNote === 'დასტურდება' && (
-                                      <span className="flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold border border-blue-100">
-                                        CEO <Check size={12} />
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 text-center">
-                                  <div className="flex items-center justify-center gap-2">
-                                    <button
-                                      onClick={() => handleReturnToCouncil(req.id)}
-                                      className="flex items-center gap-1.5 px-3 py-2 bg-yellow-500 text-white text-xs font-bold uppercase rounded hover:bg-yellow-600 transition-colors shadow-md"
-                                      title="საბჭოზე დაბრუნება"
-                                    >
-                                      <CornerUpLeft size={14} />
-                                    </button>
-                                    <button
-                                      onClick={() => handleTransferToAccounting(req.id)}
-                                      className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-bold uppercase rounded hover:bg-emerald-700 transition-colors shadow-md"
-                                    >
-                                      <Send size={14} />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                      <button
+                                        onClick={() => handleReturnToCouncil(req.id)}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-yellow-500 text-white text-xs font-bold uppercase rounded hover:bg-yellow-600 transition-colors shadow-md"
+                                        title="საბჭოზე დაბრუნება"
+                                      >
+                                        <CornerUpLeft size={14} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleTransferToAccounting(req.id)}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-bold uppercase rounded hover:bg-emerald-700 transition-colors shadow-md"
+                                      >
+                                        <Send size={14} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
+                          <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-300">
+                            <tr>
+                              <td colSpan={4} className="px-3 py-3 text-right uppercase text-[10px]">ჯამი (GEL):</td>
+                              <td className="px-3 py-3 text-right font-mono text-red-700 text-sm">
+                                {formatNumber(finalRequests.reduce((sum, r) => {
+                                  const rate = r.currency === Currency.USD ? MOCK_RATES.USD : r.currency === Currency.EUR ? MOCK_RATES.EUR : 1;
+                                  return sum + (r.totalAmount * rate);
+                                }, 0))} GEL
+                              </td>
+                              <td colSpan={3}></td>
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                     )}

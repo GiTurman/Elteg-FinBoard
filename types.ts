@@ -16,6 +16,27 @@ export enum UserRole {
   PARTS_MANAGER = 'PARTS_MANAGER' // ნაწილების მენეჯერი
 }
 
+export interface FinancialSession {
+  id: string;
+  weekNumber: number;
+  periodStart: string;
+  periodEnd: string;
+  dateConducted: string;
+  totalRevenue: number;
+  totalAmount: number;
+  netBalance: number;
+  status: 'active' | 'archived';
+}
+
+export interface BoardSessionParams {
+  weekNumber: number;
+  periodStart: string;
+  periodEnd: string;
+  weekDate: string;
+  cutoffTime: string;
+  attendees?: string[];
+}
+
 export interface User {
   id: string;
   name: string;
