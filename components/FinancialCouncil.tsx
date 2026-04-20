@@ -72,6 +72,7 @@ import {
   Power,
   PlayCircle,
   AlertTriangle,
+  Settings2,
 } from 'lucide-react';
 import { exportGenericToExcel, exportMultiSheetExcel } from '../utils/excelExport';
 import { formatNumber } from '../utils/formatters';
@@ -175,6 +176,16 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
   // ── Roles ─────────────────────────────────
   const isFinDirector = user.role === UserRole.FIN_DIRECTOR;
   const isTopLevel = user.role === UserRole.FOUNDER || user.role === UserRole.FIN_DIRECTOR || user.role === UserRole.CEO;
+
+  // ── Manual Board Open ──────────────────────
+  const [showManualOpenModal, setShowManualOpenModal] = useState(false);
+  const [manualOpenParams, setManualOpenParams] = useState({
+    weekNumber: 1,
+    periodStart: new Date().toISOString().split('T')[0],
+    periodEnd: new Date().toISOString().split('T')[0],
+    weekDate: new Date().toISOString().split('T')[0],
+    cutoffTime: '17:00'
+  });
 
   const syncTrigger = useSync();
 
@@ -521,6 +532,52 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       );
     } catch (e) {
       alert('Error opening board session');
+    }
+  };
+
+  const handleManualOpenSubmit = async () => {
+    try {
+      const pending = await getPendingRequestsForCarryover();
+      setCarriedOverCount(pending.length);
+
+      const session = await openBoardSession(user, {
+        weekNumber: manualOpenParams.weekNumber,
+        periodStart: manualOpenParams.periodStart,
+        periodEnd: manualOpenParams.periodEnd,
+        weekDate: manualOpenParams.weekDate,
+        cutoffTime: manualOpenParams.cutoffTime
+      });
+
+      for (const req of pending) {
+        if (req.status !== RequestStatus.COUNCIL_REVIEW) {
+          await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, user.id);
+        }
+      }
+
+      setSelectedSessionDate(null);
+      setActiveBoardSession(session);
+      setCurrentStep(1);
+      setBankAccounts([]);
+      setRevenueCategories([]);
+      setFinalRequests([]);
+      setDispatchedHistory([]);
+      setReportData(null);
+      setIsReportGenerated(false);
+      setCompletionTimestamp(null);
+      setAiConclusion('');
+      setIsConclusionConfirmed(false);
+      setShowManualOpenModal(false);
+
+      logActivity(
+        user,
+        LogAction.OPEN_BOARD,
+        `Board opened MANUALLY for week #${manualOpenParams.weekNumber} (${manualOpenParams.weekDate}).`
+      );
+      
+      alert(`საბჭო წარმატებით გაიხსნა!`);
+    } catch (e) {
+      console.error(e);
+      alert('ვერ მოხერხდა საბჭოს გახსნა');
     }
   };
 
@@ -1138,6 +1195,15 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                                   className="px-6 py-2 bg-green-600 text-white font-bold uppercase rounded hover:bg-green-700 transition-colors flex items-center gap-2 shadow-lg text-xs"
                                 >
                                   <PlayCircle size={14} /> საბჭოში გადასვლა
+                                </button>
+                              )}
+
+                              {isTopLevel && (
+                                <button
+                                  onClick={() => setShowManualOpenModal(true)}
+                                  className="px-6 py-2 bg-blue-600 text-white font-bold uppercase rounded hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-lg text-xs"
+                                >
+                                  <Settings2 size={14} /> ხელით გახსნა
                                 </button>
                               )}
 
@@ -2494,6 +2560,77 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
             )}
           </div>
         </>
+      )}
+
+      {/* ── MANUAL OPEN MODAL ── */}
+      {showManualOpenModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 text-black">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-blue-600 text-white font-sans">
+              <h3 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
+                <Settings2 size={24} />
+                საბჭოს ხელით გახსნა
+              </h3>
+              <button 
+                onClick={() => setShowManualOpenModal(false)}
+                className="p-1 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6 font-sans">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">კვირის ნომერი</label>
+                <input 
+                  type="number"
+                  value={manualOpenParams.weekNumber}
+                  onChange={(e) => setManualOpenParams({...manualOpenParams, weekNumber: parseInt(e.target.value) || 0})}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-black"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">პერიოდის დასაწყისი</label>
+                  <input 
+                    type="date"
+                    value={manualOpenParams.periodStart}
+                    onChange={(e) => setManualOpenParams({...manualOpenParams, periodStart: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-xs text-black"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">პერიოდის დასასრული</label>
+                  <input 
+                    type="date"
+                    value={manualOpenParams.periodEnd}
+                    onChange={(e) => setManualOpenParams({...manualOpenParams, periodEnd: e.target.value})}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-xs text-black"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">საბჭოს თარიღი (ოთხშაბათი)</label>
+                <input 
+                  type="date"
+                  value={manualOpenParams.weekDate}
+                  onChange={(e) => setManualOpenParams({...manualOpenParams, weekDate: e.target.value})}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-sm text-black"
+                />
+              </div>
+
+              <button
+                onClick={handleManualOpenSubmit}
+                className="w-full py-4 bg-blue-600 text-white font-bold uppercase rounded-xl hover:bg-blue-700 transition-all shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <PlayCircle size={20} />
+                საბჭოს გახსნა
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
