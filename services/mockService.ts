@@ -1282,6 +1282,9 @@ export const openBoardSession = async (
 ): Promise<BoardSession> => {
   const now = new Date();
   
+  // Deactivate all previous sessions to avoid picking up the old one
+  BOARD_SESSIONS.forEach(s => s.isActive = false);
+  
   // If params are not provided, calculate defaults (e.g. for automatic rollover)
   const weekDate = params?.weekDate || nextWednesday(now).toISOString();
   

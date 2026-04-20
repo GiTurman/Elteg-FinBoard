@@ -341,10 +341,16 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
    */
   const getPendingRequestsForCarryover = async (): Promise<ExpenseRequest[]> => {
     const all = await getAllRequests();
+    const finalStatuses = [
+      RequestStatus.PAID,
+      RequestStatus.REJECTED,
+      RequestStatus.DISPATCHED_TO_ACCOUNTING,
+      RequestStatus.APPROVED_FOR_PAYMENT,
+    ];
     return all.filter(
       (r) =>
-        r.status === RequestStatus.COUNCIL_REVIEW ||
-        r.status === RequestStatus.WAITING_DEPT_APPROVAL
+        r.status !== RequestStatus.DRAFT &&
+        !finalStatuses.includes(r.status)
     );
   };
 
@@ -506,8 +512,10 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       // We update each pending request's status to COUNCIL_REVIEW so they
       // appear naturally in Step 3 of the new session.
       for (const req of pending) {
-        if (req.status !== RequestStatus.COUNCIL_REVIEW) {
+        if (req.status !== RequestStatus.COUNCIL_REVIEW && req.status !== RequestStatus.WAITING_DEPT_APPROVAL) {
           await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, user.id);
+        } else {
+          await updateRequestStatus(req.id, req.status, user.id);
         }
       }
 
@@ -548,9 +556,16 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
         cutoffTime: manualOpenParams.cutoffTime
       });
 
+      // Update status for pending requests to ensure they appear in Step 3
+      // Note: openBoardSession already rolled over their boardDate
       for (const req of pending) {
-        if (req.status !== RequestStatus.COUNCIL_REVIEW) {
+        if (req.status !== RequestStatus.COUNCIL_REVIEW && req.status !== RequestStatus.WAITING_DEPT_APPROVAL) {
           await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, user.id);
+        } else {
+          // Even if status is correct, we might want to "touch" it or just let it be
+          // Since boardDate is already updated by openBoardSession, we just need to ensure
+          // the UI refreshes. updateRequestStatus calls syncRequests().
+          await updateRequestStatus(req.id, req.status, user.id);
         }
       }
 
