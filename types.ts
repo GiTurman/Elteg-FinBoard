@@ -101,6 +101,10 @@ export interface BoardSession {
   isActive: boolean;
   attendees: string[]; // List of User IDs
   initiatorId: string;
+  weekNumber?: number;
+  periodStart?: string;
+  periodEnd?: string;
+  cutoffTime?: string;
 }
 
 export interface ExpenseRequest {

@@ -538,6 +538,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
         LogAction.OPEN_BOARD,
         `Board session opened for week ${session.weekDate}. Carried over ${pending.length} pending request(s).`
       );
+      window.location.reload();
     } catch (e) {
       alert('Error opening board session');
     }
@@ -590,6 +591,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
       );
       
       alert(`საბჭო წარმატებით გაიხსნა!`);
+      window.location.reload();
     } catch (e) {
       console.error(e);
       alert('ვერ მოხერხდა საბჭოს გახსნა');
@@ -601,70 +603,81 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
    * Called only from Step 13 after the report is finalized.
    */
   const handleCloseBoard = async () => {
-  if (!activeBoardSession) return;
+    if (!activeBoardSession) return;
 
-  const confirmClose = window.confirm(
-    "დარწმუნებული ხართ, რომ გსურთ მიმდინარე საბჭოს დახურვა და შემდეგი კვირის გახსნა?"
-  );
+    const confirmClose = window.confirm(
+      "დარწმუნებული ხართ, რომ გსურთ მიმდინარე საბჭოს დახურვა და შემდეგი კვირის გახსნა?"
+    );
 
-  if (confirmClose) {
-    try {
-      // 1. მიმდინარე სესიის მონაცემების აღება
-      const currentWeekNumber = parseInt(activeBoardSession.weekName.replace(/[^0-9]/g, '')) || 15;
-      const nextWeekNumber = currentWeekNumber + 1;
+    if (confirmClose) {
+      try {
+        // 1. მიმდინარე სესიის მონაცემების აღება
+        const currentWeekNumber = (activeBoardSession && activeBoardSession.weekNumber) || 15;
+        const nextWeekNumber = currentWeekNumber + 1;
 
-      // 2. თარიღების გამოთვლა (წინა სესიის დასრულებიდან + 1 დღე)
-      // მაგალითი: თუ #15 მთავრდება 08/04/2026-ში, #16 დაიწყება 09/04/2026-ში
-      const lastEndDate = new Date(activeBoardSession.endDate);
-      const nextStartDate = new Date(lastEndDate);
-      nextStartDate.setDate(lastEndDate.getDate() + 1);
-      
-      const nextEndDate = new Date(nextStartDate);
-      nextEndDate.setDate(nextStartDate.getDate() + 6); // 7 დღიანი ინტერვალი
+        // 2. თარიღების გამოთვლა - დაცვა Invalid Date-სგან
+        const baseDateString = (activeBoardSession && (activeBoardSession.weekDate || activeBoardSession.startTime)) || new Date().toISOString();
+        const baseDate = new Date(baseDateString);
+        const validBaseDate = isNaN(baseDate.getTime()) ? new Date() : baseDate;
+        
+        const lastEndDateString = (activeBoardSession && activeBoardSession.periodEnd) || "";
+        const lastEndDate = lastEndDateString ? new Date(lastEndDateString) : validBaseDate;
+        const validLastEndDate = isNaN(lastEndDate.getTime()) ? validBaseDate : lastEndDate;
+        
+        const nextStartDate = new Date(validLastEndDate);
+        nextStartDate.setDate(validLastEndDate.getDate() + 1);
+        
+        const nextEndDate = new Date(nextStartDate);
+        nextEndDate.setDate(nextStartDate.getDate() + 6); // 7 დღიანი ინტერვალი
 
-      // 3. 17:00 საათის ლიმიტის შემოწმება მონაცემების გადატანისას
-      const cutOffDate = new Date("2026-04-01T17:00:00"); 
-      // რეალურ სისტემაში აქ უნდა იყოს დინამიური თარიღი: 
-      // const cutOffDate = new Date(nextStartDate); cutOffDate.setHours(17, 0, 0);
+        const nextWeekDate = new Date(validBaseDate);
+        nextWeekDate.setDate(validBaseDate.getDate() + 7);
 
-      // 4. მიმდინარე სესიის დახურვა
-      await closeBoardSession(user);
+        // 4. მიმდინარე სესიის დახურვა
+        await closeBoardSession(user);
 
-      // 5. მოთხოვნების წამოღება გადასატანად (Carry-over)
-      const pendingReqs = await getPendingRequestsForCarryover();
-      
-      // ფილტრაცია თქვენი წესის მიხედვით: 17:00-მდე შეყვანილი ინფორმაცია
-      const reqsToCarry = pendingReqs.filter(req => {
-        const createdAt = new Date(req.createdAt);
-        return createdAt <= cutOffDate;
-      });
+        // 5. მოთხოვნების წამოღება გადასატანად (Carry-over)
+        const pendingReqs = await getPendingRequestsForCarryover();
+        
+        // მიმდინარე სესიის ლიმიტის შემოწმება
+        const cutOffTimeStr = activeBoardSession.cutoffTime || "17:00";
+        const [hours, minutes] = cutOffTimeStr.split(':').map(Number);
+        
+        const cutOffDate = new Date(validBaseDate);
+        cutOffDate.setHours(hours || 17, minutes || 0, 0, 0);
 
-      // 6. ახალი სესიის გახსნა (მაისში გადახტომის გარეშე)
-      const nextSession = await openBoardSession(user, {
-        weekNumber: nextWeekNumber,
-        periodStart: nextStartDate.toISOString(),
-        periodEnd: nextEndDate.toISOString(),
-        weekDate: nextStartDate.toISOString(),
-        cutoffTime: "17:00"
-      });
+        const reqsToCarry = pendingReqs.filter(req => {
+          if (!req.createdAt) return true; // თუ თარიღი არაა, მაინც გადავიტანოთ
+          const createdAt = new Date(req.createdAt);
+          return createdAt <= cutOffDate;
+        });
 
-      // 7. მონაცემების გადაბმა ახალ სესიაზე
-      if (reqsToCarry.length > 0) {
-        for (const req of reqsToCarry) {
-          await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, user.id);
+        // 6. ახალი სესიის გახსნა
+        await openBoardSession(user, {
+          weekNumber: nextWeekNumber,
+          periodStart: nextStartDate.toISOString(),
+          periodEnd: nextEndDate.toISOString(),
+          weekDate: nextWeekDate.toISOString(),
+          cutoffTime: "17:00"
+        });
+
+        // 7. მონაცემების გადაბმა ახალ სესიაზე
+        if (reqsToCarry.length > 0) {
+          for (const req of reqsToCarry) {
+            await updateRequestStatus(req.id, RequestStatus.COUNCIL_REVIEW, user.id);
+          }
+          logActivity(user, LogAction.UPDATE_REQUEST, `გადატანილია ${reqsToCarry.length} მოთხოვნა კვირა #${nextWeekNumber}-ში`);
         }
-        logActivity(user, 'SYSTEM', `გადატანილია ${reqsToCarry.length} მოთხოვნა კვირა #${nextWeekNumber}-ში`);
+
+        alert(`საბჭო დაიხურა. გახსნილია კვირა #${nextWeekNumber} (${nextStartDate.toLocaleDateString()} - ${nextEndDate.toLocaleDateString()})`);
+        window.location.reload();
+
+      } catch (error) {
+        console.error("შეცდომა სესიის დახურვისას:", error);
+        alert("ვერ მოხერხდა სესიის დახურვა: " + (error instanceof Error ? error.message : "უცნობი შეცდომა"));
       }
-
-      alert(`საბჭო დაიხურა. გახსნილია კვირა #${nextWeekNumber} (${nextStartDate.toLocaleDateString()} - ${nextEndDate.toLocaleDateString()})`);
-      window.location.reload();
-
-    } catch (error) {
-      console.error("შეცდომა სესიის დახურვისას:", error);
-      alert("ვერ მოხერხდა სესიის დახურვა.");
     }
-  }
-};
+  };
 
   // ─────────────────────────────────────────────
   // BANK ACCOUNT ACTIONS
@@ -1222,7 +1235,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                                 </button>
                               )}
 
-                              {isFinDirector && (
+                              {isTopLevel && (
                                 <button
                                   onClick={handleOpenBoard}
                                   className="px-6 py-2 bg-black text-white font-bold uppercase rounded hover:bg-gray-800 transition-colors flex items-center gap-2 shadow-lg text-xs"
@@ -1231,7 +1244,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                                 </button>
                               )}
 
-                              {!activeBoardSession && !isFinDirector && (
+                              {!activeBoardSession && !isTopLevel && (
                                 <div className="px-4 py-2 bg-gray-100 text-gray-400 font-bold uppercase rounded text-xs flex items-center gap-2 border border-gray-200">
                                   <Lock size={14} /> საბჭო დახურულია
                                 </div>
@@ -2559,7 +2572,7 @@ export const FinancialCouncil: React.FC<FinancialCouncilProps> = ({ user }) => {
                         Visible only to FD, only after the report is finalized.
                         Clicking it closes the current session AND auto-opens the next week.
                       */}
-                      {isFinDirector && completionTimestamp && activeBoardSession && (
+                      {isTopLevel && completionTimestamp && activeBoardSession && (
                         <button
                           onClick={handleCloseBoard}
                           className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white font-bold uppercase text-xs rounded hover:bg-red-700 transition-colors shadow-lg"

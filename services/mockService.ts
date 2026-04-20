@@ -1288,13 +1288,41 @@ export const openBoardSession = async (
   // If params are not provided, calculate defaults (e.g. for automatic rollover)
   const weekDate = params?.weekDate || nextWednesday(now).toISOString();
   
+  // Auto-calculate week number if missing
+  let weekNum = params?.weekNumber;
+  if (!weekNum) {
+    const d = new Date(weekDate);
+    const startOfYear = new Date(d.getFullYear(), 0, 1);
+    const pastDays = (d.getTime() - startOfYear.getTime()) / 86400000;
+    weekNum = Math.ceil((pastDays + startOfYear.getDay() + 1) / 7);
+  }
+
+  // Auto-calculate period if missing
+  let pStart = params?.periodStart;
+  let pEnd = params?.periodEnd;
+  
+  if (!pStart || !pEnd) {
+    const d = new Date(weekDate);
+    // Standard 1 week period ending on the weekDate
+    const end = new Date(d);
+    const start = new Date(d);
+    start.setDate(d.getDate() - 6);
+    
+    if (!pStart) pStart = start.toISOString();
+    if (!pEnd) pEnd = end.toISOString();
+  }
+
   const newSession: BoardSession = {
     id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     weekDate: weekDate,
     startTime: now.toISOString(),
     isActive: true,
     attendees: params?.attendees || [],
-    initiatorId: user.id
+    initiatorId: user.id,
+    weekNumber: weekNum,
+    periodStart: pStart,
+    periodEnd: pEnd,
+    cutoffTime: params?.cutoffTime || "17:00",
   };
 
   BOARD_SESSIONS.push(newSession);
@@ -1304,6 +1332,7 @@ export const openBoardSession = async (
   // ✅ Pull in ALL pending requests to this new session's date
   const targetDateStr = weekDate.split('T')[0];
   rolloverPendingRequests(targetDateStr);
+  syncRequests();
   
   return newSession;
 };
@@ -1314,20 +1343,14 @@ export const closeBoardSession = async (user: User): Promise<BoardSession | null
         active.isActive = false;
         active.endTime = new Date().toISOString();
         
-        // Rollover logic: Move pending requests to the NEXT board date
-        const nextDate = new Date(active.weekDate);
-        nextDate.setDate(nextDate.getDate() + 7);
-        const nextDateStr = nextDate.toISOString().split('T')[0];
-        rolloverPendingRequests(nextDateStr);
-
         syncBoardSessions();
         localStorage.removeItem('finboard_council_step');
         
         // Log the closing
-        logActivity(user, LogAction.CLOSE_BOARD, `Board session for ${active.weekDate.split('T')[0]} closed by ${user.name}. Requests rolled over to ${nextDateStr}.`);
+        const dateStr = active.weekDate ? active.weekDate.split('T')[0] : (active.startTime ? active.startTime.split('T')[0] : 'Unknown');
+        logActivity(user, LogAction.CLOSE_BOARD, `Board session for ${dateStr} closed by ${user.name}.`);
 
-        // Automatically open the next session
-        return await openBoardSession(user);
+        return active;
     }
     
     syncBoardSessions();
@@ -1522,14 +1545,14 @@ export const generateAIReportSummary = async (data: MasterReportData, user?: Use
       }
   };
 
-  if (!process.env.API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     const totalRevenue = summaryData.revenues.reduce((sum, r) => sum + (r.actualAmount || 0), 0);
     const totalExpense = summaryData.expensesByDept.reduce((sum, e) => sum + e.totalApproved, 0);
     const topExpenseDept = [...summaryData.expensesByDept].sort((a, b) => b.totalApproved - a.totalApproved)[0];
-    return `პერიოდის ანალიზი:\n- შემოსავლები: ${totalRevenue.toLocaleString()} GEL\n- ხარჯები: ${totalExpense.toLocaleString()} GEL (დომინანტი: ${topExpenseDept?.department || 'N/A'})\n- დებიტორული: ${summaryData.debtorTotals.totalBalance.toLocaleString()} GEL\n- კრედიტორული: ${summaryData.creditorTotals.totalBalance.toLocaleString()} GEL\n\nრეკომენდაცია: საჭიროა დებიტორული დავალიანების შემცირებაზე ფოკუსირება.\n(მოქ-პასუხი: API Key არ არის.)`;
+    return `პერიოდის ანალიზი:\n- შემოსავლები: ${totalRevenue.toLocaleString()} GEL\n- ხარჯები: ${totalExpense.toLocaleString()} GEL (დომინანტი: ${topExpenseDept?.department || 'N/A'})\n- დებიტორული: ${summaryData.debtorTotals.totalBalance.toLocaleString()} GEL\n- კრედიტორული: ${summaryData.creditorTotals.totalBalance.toLocaleString()} GEL\n\nრეკომენდაცია: საჭიროა დებიტორული დავალიანების შემცირებაზე ფოკუსირება.\n(მოქ-პასუხი: Gemini API Key არ არის.)`;
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const prompt = `Analyze the following JSON data for a corporate board meeting financial summary. Provide a concise summary in Georgian.\n\nData:\n${JSON.stringify(summaryData, null, 2)}\n\nAnalysis Criteria (in Georgian):\n1. Overall financial health.\n2. Key revenue sources.\n3. Top spending departments.\n4. Debt situation.\n5. Key recommendations.\n\nKeep the summary professional, objective, and around 150 words.`;
 
   try {
